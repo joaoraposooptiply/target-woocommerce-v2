@@ -6,9 +6,8 @@ from singer_sdk.target_base import Target
 from singer_sdk import typing as th
 
 from target_woocommerce.sinks import (
-    WooCommerceSink,
+    WooCommerceSink
 )
-
 
 class TargetWooCommerce(Target):
     """Sample target for WooCommerce."""
