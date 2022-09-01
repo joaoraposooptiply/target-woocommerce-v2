@@ -5,7 +5,7 @@ from __future__ import annotations
 from singer_sdk.sinks import RecordSink
 import requests 
 from random_user_agent.user_agent import UserAgent
-from target_woocommerce.mapper import products_from_unified
+from target_woocommerce.mapper import products_from_unified, orders_from_unified
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 import html 
 import json
@@ -52,8 +52,12 @@ class WooCommerceSink(RecordSink):
         self.validate_response(resp)
 
     def process_record(self, record: dict, context: dict) -> None:
-        streams = {"Products":"products"}
+        streams = {
+            "Products":"products",
+            "Sales Orders":"orders"
+                }
 
+        # Products 
         if self.stream_name == "Products":
             record = products_from_unified(record)
 
@@ -65,6 +69,10 @@ class WooCommerceSink(RecordSink):
                 context["product_categories"] = self.get_product_categories()
             elif record.get("categories") is not None:
                 record["categories"] = [{"id":context["product_categories"][record["categories"]]}]
+
+        # Sales Orders
+        if self.stream_name == "Sales Orders":
+            record = orders_from_unified(record)
         
         url = f"{self.url_base}{streams[self.stream_name]}"
 
@@ -73,6 +81,8 @@ class WooCommerceSink(RecordSink):
 
         resp = requests.post(url=url,headers=headers,auth=auth,json=json.dumps(record))
         self.validate_response(resp)
+
+
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""
