@@ -2,13 +2,13 @@ def products_from_unified(record):
 
     mapp = {
         "name": "name",
-        #"variant": "type",
+        # "variant": "type",
         "price": "regular_price",
         "description": "description",
         "short_description": "short_description",
         "sku": "sku",
         "category": "categories",
-        #"image_urls": "images",  # turn list of str into list of obj w/str
+        # "image_urls": "images",  # turn list of str into list of obj w/str
     }
 
     products = dict(
@@ -34,9 +34,10 @@ def orders_from_unified(record):
         "shipping_address": "shipping",
         "line_items": "line_items",
         "currency": "currency",
-        #"status": "status",
+        # "status": "status",
         "total_price": "total",
         "total_tax": "total_tax",
+        # "transaction_date":"date_paid"
     }
 
     orders = dict(
@@ -45,6 +46,9 @@ def orders_from_unified(record):
 
     if orders.get("line_items"):
         orders["line_items"] = line_items_from_unified(orders["line_items"])
+
+    if orders.get("date_paid"):
+        orders["date_paid"] = orders["date_paid"].replace("Z", "")
 
     if orders.get("billing"):
         orders["billing"] = address_from_unified(orders["billing"])
@@ -61,10 +65,7 @@ def orders_from_unified(record):
 
 def line_items_from_unified(line_items):
 
-    mapp = {
-        "sku":"sku",
-        "quantity":"quantity"
-    }
+    mapp = {"sku": "sku", "quantity": "quantity"}
     items = []
     for item in line_items:
         items.append(

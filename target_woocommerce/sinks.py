@@ -38,30 +38,26 @@ class WooCommerceSink(RecordSink):
 
     def get_woo_products(self):
 
-        n = 1 
+        n = 1
 
-        params = {
-            "per_page":100,
-            "order":"asc",
-            "page":n
-        }
+        params = {"per_page": 100, "order": "asc", "page": n}
 
         auth = self.authenticator
         url = f"{self.url_base}products"
         resp = True
         products = []
         while resp:
-            resp = requests.get(url=url, auth=auth,params=params)
+            resp = requests.get(url=url, auth=auth, params=params)
             self.validate_response(resp)
             resp = resp.json()
             n += 1
-            params.update({"page":n})
-            products+=resp
+            params.update({"page": n})
+            products += resp
 
         product_ids = {}
 
         for product in products:
-            product_ids.update({product["sku"]:product["id"]})
+            product_ids.update({product["sku"]: product["id"]})
 
         return product_ids
 
@@ -106,11 +102,12 @@ class WooCommerceSink(RecordSink):
             products = self.get_woo_products()
 
             record_line_items = record["line_items"]
-            record_line_items = [{"product_id": products[i['sku']], "quantity": i['quantity'] } for i in record_line_items]
+            record_line_items = [
+                {"product_id": products[i["sku"]], "quantity": i["quantity"]}
+                for i in record_line_items
+            ]
 
-            record.update({'line_items':record_line_items})
-
-
+            record.update({"line_items": record_line_items})
 
         url = f"{self.url_base}{streams[self.stream_name]}"
 
