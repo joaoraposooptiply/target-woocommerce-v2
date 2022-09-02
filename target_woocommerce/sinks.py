@@ -36,6 +36,35 @@ class WooCommerceSink(RecordSink):
         # headers["User-Agent"] = self.user_agents.get_random_user_agent().strip()
         return headers
 
+    def get_woo_products(self):
+
+        n = 1 
+
+        params = {
+            "per_page":100,
+            "order":"asc",
+            "page":n
+        }
+
+        auth = self.authenticator
+        url = f"{self.url_base}products"
+        resp = True
+        products = []
+        while resp:
+            resp = requests.get(url=url, auth=auth,params=params)
+            self.validate_response(resp)
+            resp = resp.json()
+            n += 1
+            params.update({"page":n})
+            products+=resp
+
+        product_ids = {}
+
+        for product in products:
+            product_ids.update({product["sku"]:product["id"]})
+
+        return product_ids
+
     def get_product_categories(self) -> dict:
 
         auth = self.authenticator
@@ -74,13 +103,22 @@ class WooCommerceSink(RecordSink):
         if self.stream_name == "Sales Orders":
             record = orders_from_unified(record)
 
+            products = self.get_woo_products()
+
+            record_line_items = record["line_items"]
+            record_line_items = [{"product_id": products[i['sku']], "quantity": i['quantity'] } for i in record_line_items]
+
+            record.update({'line_items':record_line_items})
+
+
+
         url = f"{self.url_base}{streams[self.stream_name]}"
 
         headers = self.http_headers
         auth = self.authenticator
 
         resp = requests.post(
-            url=url, headers=headers, auth=auth, json=json.dumps(record)
+            url=url, headers=headers, auth=auth, data=json.dumps(record)
         )
         self.validate_response(resp)
 
@@ -95,12 +133,14 @@ class WooCommerceSink(RecordSink):
         elif 500 <= response.status_code < 600 or response.status_code in [429]:
             msg = (
                 f"{response.status_code} Server Error: "
-                f"{response.reason} for path: {self.path}"
+                f"{response.reason} for path: {self.stream_name}"
+                f"{response.text}"
             )
             raise RetriableAPIError(msg)
         elif 400 <= response.status_code < 500:
             msg = (
                 f"{response.status_code} Client Error: "
-                f"{response.reason} for path: {self.path}"
+                f"{response.reason} for path: {self.stream_name}"
+                f"{response.text}"
             )
             raise FatalAPIError(msg)
