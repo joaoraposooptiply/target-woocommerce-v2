@@ -2,21 +2,17 @@ def products_from_unified(record):
 
     mapp = {
         "name": "name",
-        # "variant": "type",
         "price": "regular_price",
         "description": "description",
         "short_description": "short_description",
         "sku": "sku",
         "category": "categories",
-        # "image_urls": "images",  # turn list of str into list of obj w/str
+        "available_quantity": "stock_quantity",
     }
 
     products = dict(
         (mapp[key], value) for (key, value) in record.items() if key in mapp.keys()
     )
-
-    if products.get("images"):
-        products["images"] = [{"src": i} for i in products["images"]]
 
     if products.get("categories"):
         products["categories"] = products["categories"]["name"]
@@ -34,10 +30,6 @@ def orders_from_unified(record):
         "shipping_address": "shipping",
         "line_items": "line_items",
         "currency": "currency",
-        # "status": "status",
-        "total_price": "total",
-        "total_tax": "total_tax",
-        # "transaction_date":"date_paid"
     }
 
     orders = dict(
@@ -66,8 +58,13 @@ def orders_from_unified(record):
 def line_items_from_unified(line_items):
 
     mapp = {"sku": "sku", "quantity": "quantity"}
+
     items = []
     for item in line_items:
+
+        if item.get("discount_amount") and item.get("total_price"):
+            item["discount_amount"] = item["total_price"] - item["discount_amount"]
+
         items.append(
             dict(
                 (mapp[key], value)

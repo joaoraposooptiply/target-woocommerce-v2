@@ -9,8 +9,8 @@ import requests
 from random_user_agent.user_agent import UserAgent
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.sinks import RecordSink
-
-from target_woocommerce.mapper import orders_from_unified, products_from_unified
+from target_woocommerce.mapper import (orders_from_unified,
+                                       products_from_unified)
 
 
 class WooCommerceSink(RecordSink):
@@ -72,6 +72,8 @@ class WooCommerceSink(RecordSink):
 
     def update_product_categories(self, category_name) -> None:
 
+        if category_name == None:
+            return {}
         auth = self.authenticator
         url = f"{self.url_base}products/categories"
         resp = requests.post(url=url, auth=auth, data={"name": category_name})
