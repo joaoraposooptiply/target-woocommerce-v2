@@ -128,7 +128,7 @@ class WooCommerceSink(RecordSink):
             record_line_items_ = [] 
             for i in record_line_items: 
                 
-                if i['product_id'] is not None and i["product_id"] in products.keys(): 
+                if i['product_id'] is not None and int(i["product_id"]) in products.values(): 
                     {"product_id": i["product_id"], "quantity": i["quantity"]}
                 elif i['sku'] is not None and i["sku"] in products.keys(): 
                     record_line_items_.append({"product_id": products[i["sku"]], "quantity": i["quantity"]})
