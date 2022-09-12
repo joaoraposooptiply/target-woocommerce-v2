@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Dict
 
 from singer_sdk.testing import get_standard_target_tests
+
 from target_woocommerce.target import TargetWooCommerce
 
 SAMPLE_CONFIG: Dict[str, Any] = {

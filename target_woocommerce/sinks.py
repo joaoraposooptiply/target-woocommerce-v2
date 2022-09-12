@@ -9,14 +9,16 @@ import requests
 from random_user_agent.user_agent import UserAgent
 from singer_sdk.exceptions import FatalAPIError, RetriableAPIError
 from singer_sdk.sinks import RecordSink
-from target_woocommerce.mapper import (orders_from_unified,
-                                       products_from_unified)
+
+from target_woocommerce.mapper import orders_from_unified, products_from_unified
 
 
 class WooCommerceSink(RecordSink):
     """WooCommerce target sink class."""
 
     user_agents = UserAgent(software_engines="blink", software_names="chrome")
+    products = []
+    product_ids = {}
 
     @property
     def url_base(self) -> str:
@@ -37,29 +39,32 @@ class WooCommerceSink(RecordSink):
         return headers
 
     def get_woo_products(self):
+        if len(self.product_ids) > 0:
+            return self.product_ids
+        else:
+            n = 1
 
-        n = 1
+            params = {"per_page": 100, "order": "asc", "page": n}
 
-        params = {"per_page": 100, "order": "asc", "page": n}
+            auth = self.authenticator
+            url = f"{self.url_base}products"
+            resp = True
+            products = []
+            while resp:
+                resp = requests.get(url=url, auth=auth, params=params)
+                self.validate_response(resp)
+                resp = resp.json()
+                n += 1
+                params.update({"page": n})
+                products += resp
 
-        auth = self.authenticator
-        url = f"{self.url_base}products"
-        resp = True
-        products = []
-        while resp:
-            resp = requests.get(url=url, auth=auth, params=params)
-            self.validate_response(resp)
-            resp = resp.json()
-            n += 1
-            params.update({"page": n})
-            products += resp
+            product_ids = {}
 
-        product_ids = {}
-
-        for product in products:
-            product_ids.update({product["sku"]: product["id"]})
-
-        return product_ids
+            for product in products:
+                product_ids.update({product["sku"]: product["id"]})
+            self.product_ids = product_ids
+            self.products = products
+            return self.product_ids
 
     def get_product_categories(self) -> dict:
 
@@ -79,9 +84,24 @@ class WooCommerceSink(RecordSink):
         resp = requests.post(url=url, auth=auth, data={"name": category_name})
         self.validate_response(resp)
 
-    def process_record(self, record: dict, context: dict) -> None:
-        streams = {"Products": "products", "Sales Orders": "orders"}
+    def find_product(self, filter_key, filter_val):
+        ret_product = {}
+        if len(self.products) > 0:
+            for product in self.products:
+                if filter_key in product:
+                    if product[filter_key] == filter_val:
+                        ret_product = product
+                        break
+        return ret_product
 
+    def process_record(self, record: dict, context: dict) -> None:
+        product = None
+        streams = {
+            "Products": "products",
+            "Sales Orders": "orders",
+            "UpdateInventory": "products",
+        }
+        method = "POST"
         # Products
         if self.stream_name == "Products":
             record = products_from_unified(record)
@@ -111,15 +131,52 @@ class WooCommerceSink(RecordSink):
 
             record.update({"line_items": record_line_items})
 
+        # Update Product Inventory
+        if self.stream_name == "UpdateInventory":
+            method = "PUT"
+            ids = self.get_woo_products()
+            # find product by id
+            if len(record["id"]) > 0:
+                product = self.find_product("id", int(record["id"]))
+            elif len(record["sku"]) > 0:
+                product = self.find_product("sku", record["sku"])
+            elif len(record["name"]) > 0:
+                product = self.find_product("name", record["name"])
+
+            if product:
+                in_stock = True
+                current_stock = product.get("stock_quantity", 0)
+                if record["operation"] == "subtract":
+                    current_stock = current_stock - int(record["quantity"])
+                else:
+                    current_stock = current_stock + int(record["quantity"])
+
+                if current_stock <= 0:
+                    in_stock = False
+
+                product.update(
+                    {
+                        "stock_quantity": current_stock,
+                        "manage_stock": True,
+                        "in_stock": in_stock,
+                    }
+                )
+                record = product
+
         url = f"{self.url_base}{streams[self.stream_name]}"
 
         headers = self.http_headers
         auth = self.authenticator
+        if method == "POST":
+            resp = requests.post(
+                url=url, headers=headers, auth=auth, data=json.dumps(record)
+            )
+            self.validate_response(resp)
 
-        resp = requests.post(
-            url=url, headers=headers, auth=auth, data=json.dumps(record)
-        )
-        self.validate_response(resp)
+        if method == "PUT" and product is not None:
+            url = f"{url}/{product['id']}"
+            resp = requests.put(url=url, headers=headers, auth=auth, json=record)
+            self.validate_response(resp)
 
     def validate_response(self, response: requests.Response) -> None:
         """Validate HTTP response."""

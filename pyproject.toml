@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "target-woocommerce"
-version = "0.0.1"
+version = "0.0.2"
 description = "`target-woocommerce` is a Singer target for WooCommerce, built with the Meltano SDK for Singer Targets."
 authors = ["arthur hotglue"]
 keywords = [
