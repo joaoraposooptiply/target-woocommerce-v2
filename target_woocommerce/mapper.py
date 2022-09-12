@@ -36,28 +36,33 @@ def orders_from_unified(record):
         (mapp[key], value) for (key, value) in record.items() if key in mapp.keys()
     )
 
+    if orders.get("currency"):
+        # Ensuring the currency is uppercase (WooCommerce requirement)
+        orders["currency"] = orders["currency"].upper()
+
     if orders.get("line_items"):
         orders["line_items"] = line_items_from_unified(orders["line_items"])
 
     if orders.get("date_paid"):
         orders["date_paid"] = orders["date_paid"].replace("Z", "")
 
-    if orders.get("billing"):
-        orders["billing"] = address_from_unified(orders["billing"])
-        orders["billing"]["first_name"] = record.get("customer_name").split()[0]
-        orders["billing"]["last_name"] = record.get("customer_name").split()[-1]
+    if record.get("customer_name") is not None:
+        if orders.get("billing"):
+            orders["billing"] = address_from_unified(orders["billing"])
+            orders["billing"]["first_name"] = record.get("customer_name").split()[0]
+            orders["billing"]["last_name"] = record.get("customer_name").split()[-1]
 
-    if orders.get("shipping"):
-        orders["shipping"] = address_from_unified(orders["shipping"])
-        orders["shipping"]["first_name"] = record.get("customer_name").split()[0]
-        orders["shipping"]["last_name"] = record.get("customer_name").split()[-1]
+        if orders.get("shipping"):
+            orders["shipping"] = address_from_unified(orders["shipping"])
+            orders["shipping"]["first_name"] = record.get("customer_name").split()[0]
+            orders["shipping"]["last_name"] = record.get("customer_name").split()[-1]
 
     return orders
 
 
 def line_items_from_unified(line_items):
 
-    mapp = {"sku": "sku", "quantity": "quantity"}
+    mapp = {"sku": "sku", "quantity": "quantity","product_id":"product_id","product_name":"product_name"}
 
     items = []
     for item in line_items:

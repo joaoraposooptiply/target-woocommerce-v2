@@ -124,12 +124,19 @@ class WooCommerceSink(RecordSink):
             products = self.get_woo_products()
 
             record_line_items = record["line_items"]
-            record_line_items = [
-                {"product_id": products[i["sku"]], "quantity": i["quantity"]}
-                for i in record_line_items
-            ]
 
-            record.update({"line_items": record_line_items})
+            record_line_items_ = [] 
+            for i in record_line_items: 
+                
+                if i['product_id'] is not None and i["product_id"] in products.keys(): 
+                    {"product_id": i["product_id"], "quantity": i["quantity"]}
+                elif i['sku'] is not None and i["sku"] in products.keys(): 
+                    record_line_items_.append({"product_id": products[i["sku"]], "quantity": i["quantity"]})
+                else: 
+                    raise Exception(f"PRODUCT ID NOT FOUND FOR ORDER LINE :{i}") 
+
+            record.update({"line_items": record_line_items_})
+
 
         # Update Product Inventory
         if self.stream_name == "UpdateInventory":
