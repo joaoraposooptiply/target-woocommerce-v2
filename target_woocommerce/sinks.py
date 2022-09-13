@@ -98,7 +98,7 @@ class WooCommerceSink(RecordSink):
         product = None
         streams = {
             "Products": "products",
-            "Sales Orders": "orders",
+            "SalesOrders": "orders",
             "UpdateInventory": "products",
         }
         method = "POST"
@@ -118,7 +118,7 @@ class WooCommerceSink(RecordSink):
                 ]
 
         # Sales Orders
-        if self.stream_name == "Sales Orders":
+        if self.stream_name == "SalesOrders":
             record = orders_from_unified(record)
 
             products = self.get_woo_products()
