@@ -142,17 +142,22 @@ class WooCommerceSink(RecordSink):
         if self.stream_name == "UpdateInventory":
             method = "PUT"
             ids = self.get_woo_products()
-            # find product by id
-            if len(record["id"]) > 0:
+            # find product by id, sku or name
+            if record.get('id') and len(record["id"]) > 0:
                 product = self.find_product("id", int(record["id"]))
-            elif len(record["sku"]) > 0:
+            elif record.get('sku') and len(record["sku"]) > 0:
                 product = self.find_product("sku", record["sku"])
-            elif len(record["name"]) > 0:
+            elif record.get('name') and len(record["name"]) > 0:
                 product = self.find_product("name", record["name"])
+            else: 
+                raise Exception("Could not find product with through id, sku or name.")
 
             if product:
                 in_stock = True
-                current_stock = product.get("stock_quantity", 0)
+                current_stock = product.get("stock_quantity", 0) # Resulting in None, don't know why but results in error
+                # Ugly fix
+                if current_stock is None: current_stock = 0
+
                 if record["operation"] == "subtract":
                     current_stock = current_stock - int(record["quantity"])
                 else:
