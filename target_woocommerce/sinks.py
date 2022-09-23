@@ -35,7 +35,7 @@ class WooCommerceSink(RecordSink):
     def http_headers(self):
         headers = {}
         headers["Content-Type"] = "application/json"
-        # headers["User-Agent"] = self.user_agents.get_random_user_agent().strip()
+        headers["User-Agent"] = self.user_agents.get_random_user_agent().strip()
         return headers
 
     def get_woo_products(self):
@@ -51,7 +51,7 @@ class WooCommerceSink(RecordSink):
             resp = True
             products = []
             while resp:
-                resp = requests.get(url=url, auth=auth, params=params)
+                resp = requests.get(url=url, auth=auth, params=params, headers=self.http_headers)
                 self.validate_response(resp)
                 resp = resp.json()
                 n += 1
