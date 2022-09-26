@@ -152,6 +152,7 @@ class WooCommerceSink(RecordSink):
                     )
 
             record.update({"line_items": record_line_items_})
+            record.update({"status":"completed"})
 
         # Update Product Inventory
         if self.stream_name == "UpdateInventory":
