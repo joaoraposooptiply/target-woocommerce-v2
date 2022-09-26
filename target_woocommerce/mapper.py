@@ -62,7 +62,12 @@ def orders_from_unified(record):
 
 def line_items_from_unified(line_items):
 
-    mapp = {"sku": "sku", "quantity": "quantity","product_id":"product_id","product_name":"product_name"}
+    mapp = {
+        "sku": "sku",
+        "quantity": "quantity",
+        "product_id": "product_id",
+        "product_name": "product_name",
+    }
 
     items = []
     for item in line_items:

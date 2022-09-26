@@ -51,7 +51,9 @@ class WooCommerceSink(RecordSink):
             resp = True
             products = []
             while resp:
-                resp = requests.get(url=url, auth=auth, params=params, headers=self.http_headers)
+                resp = requests.get(
+                    url=url, auth=auth, params=params, headers=self.http_headers
+                )
                 self.validate_response(resp)
                 resp = resp.json()
                 n += 1
@@ -60,8 +62,6 @@ class WooCommerceSink(RecordSink):
 
             product_ids = {}
 
-            for product in products:
-                product_ids.update({product["sku"]: product["id"]})
             self.product_ids = product_ids
             self.products = products
             return self.product_ids
@@ -125,38 +125,56 @@ class WooCommerceSink(RecordSink):
 
             record_line_items = record["line_items"]
 
-            record_line_items_ = [] 
-            for i in record_line_items: 
-                
-                if i['product_id'] is not None and int(i["product_id"]) in products.values(): 
-                    {"product_id": i["product_id"], "quantity": i["quantity"]}
-                elif i['sku'] is not None and i["sku"] in products.keys(): 
-                    record_line_items_.append({"product_id": products[i["sku"]], "quantity": i["quantity"]})
-                else: 
-                    raise Exception(f"PRODUCT ID NOT FOUND FOR ORDER LINE :{i}") 
+            record_line_items_ = []
+            for i in record_line_items:
+                item = dict(i)
+                # find product by id, sku or name
+                if i.get("product_id") and len(i["product_id"]) > 0:
+                    product = self.find_product("id", int(i["product_id"]))
+                elif i.get("sku") and len(i["sku"]) > 0:
+                    product = self.find_product("sku", i["sku"])
+                elif i.get("product_name") and len(i["product_name"]) > 0:
+                    product = self.find_product("name", i["product_name"])
+                else:
+                    raise Exception(
+                        "Could not find line item product with through id, sku or name."
+                    )
+
+                # All valid keys are found but no product
+                if len(product) == 0:
+                    raise Exception(
+                        "Could not find line item product with through id, sku or name."
+                    )
+
+                if product:
+                    record_line_items_.append(
+                        {"product_id": product["id"], "quantity": i["quantity"]}
+                    )
 
             record.update({"line_items": record_line_items_})
-
 
         # Update Product Inventory
         if self.stream_name == "UpdateInventory":
             method = "PUT"
             ids = self.get_woo_products()
             # find product by id, sku or name
-            if record.get('id') and len(record["id"]) > 0:
+            if record.get("id") and len(record["id"]) > 0:
                 product = self.find_product("id", int(record["id"]))
-            elif record.get('sku') and len(record["sku"]) > 0:
+            elif record.get("sku") and len(record["sku"]) > 0:
                 product = self.find_product("sku", record["sku"])
-            elif record.get('name') and len(record["name"]) > 0:
+            elif record.get("name") and len(record["name"]) > 0:
                 product = self.find_product("name", record["name"])
-            else: 
+            else:
                 raise Exception("Could not find product with through id, sku or name.")
 
             if product:
                 in_stock = True
-                current_stock = product.get("stock_quantity", 0) # Resulting in None, don't know why but results in error
+                current_stock = product.get(
+                    "stock_quantity", 0
+                )  # Resulting in None, don't know why but results in error
                 # Ugly fix
-                if current_stock is None: current_stock = 0
+                if current_stock is None:
+                    current_stock = 0
 
                 if record["operation"] == "subtract":
                     current_stock = current_stock - int(record["quantity"])
