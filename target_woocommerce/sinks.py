@@ -105,7 +105,8 @@ class ProductSink(WoocommerceSink):
             "short_description": record.get("short_description"),
             "type": prd_type,
         }
-        mapping["images"] = [{"src": i} for i in record.get("image_urls", [])]
+        if record.get("image_urls"):
+            mapping["images"] = [{"src": i} for i in record["image_urls"]]
 
         if record.get("category"):
             ctg = record["category"]
