@@ -6,17 +6,66 @@ from target_woocommerce.client import WoocommerceSink
 from backports.cached_property import cached_property
 
 
-# class SalesOrdersSink(WoocommerceSink):
-#     """Woocommerce order target sink class."""
+class SalesOrdersSink(WoocommerceSink):
+    """Woocommerce order target sink class."""
 
-#     endpoint = "/orders/create"
-#     unified_schema = SalesOrder
-#     name = SalesOrder.Stream.name
+    endpoint = "orders"
+    unified_schema = SalesOrder
+    name = SalesOrder.Stream.name
 
-#     def preprocess_record(self, record: dict, context: dict) -> dict:
-#         record = self.validate_input(record)
-        
-#         return self.validate_output(mapping)
+    def preprocess_record(self, record: dict, context: dict) -> dict:
+        record = self.validate_input(record)
+        customer_name = record.get("customer_name", "").split(" ")
+        first_name = customer_name[0]
+        last_name = " ".join(customer_name[1:])
+        billing_address = record.get("billing_address", {})
+        shipping_address = record.get("shipping_address", {})
+        mapping = {
+            "set_paid": billing_address.get("paid", False),
+            "billing": {
+                "first_name": first_name,
+                "last_name": last_name,
+                "address_1": billing_address.get("line1"),
+                "address_2": billing_address.get("line2"),
+                "city": billing_address.get("city"),
+                "state": billing_address.get("state"),
+                "postcode": billing_address.get("postal_code"),
+                "country": billing_address.get("country"),
+                "email": billing_address.get("customer_email"),
+                "phone": billing_address.get(""),
+            },
+            "shipping": {
+                "first_name": first_name,
+                "last_name": last_name,
+                "address_1": shipping_address.get("line1"),
+                "address_2": shipping_address.get("line2"),
+                "city": shipping_address.get("city"),
+                "state": shipping_address.get("state"),
+                "postcode": shipping_address.get("postal_code"),
+                "country": shipping_address.get("country"),
+            },
+            "line_items": [],
+            }
+        if record.get("customer_id"):
+            mapping["customer_id"] = mapping["customer_id"]
+        elif record.get("customer_email"):
+            customer = self.get_reference_data("customers", filter={"email": record["customer_email"]})
+            id = next(c["id"] for c in customer)
+            mapping["customer_id"] = id
+        if shipping_address.get("total_shipping"):
+            mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]
+        for line in record["line_items"]:
+            if line.get("product_id"):
+                item = {"product_id": line["product_id"], "quantity": line["quantity"]}
+            elif line.get("sku"):
+                product = self.get_reference_data("products", filter={"sku": line["sku"]})
+                id = next(p["id"] for p in product)
+                item = {"product_id": id, "quantity": line["quantity"]}
+            else:
+                raise Exception("Product not found.")
+            mapping["line_items"].append(item)
+ 
+        return self.validate_output(mapping)
 
 class UpdateInventorySink(WoocommerceSink):
     """Woocommerce order target sink class."""
