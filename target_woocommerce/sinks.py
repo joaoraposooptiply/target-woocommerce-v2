@@ -50,7 +50,7 @@ class SalesOrdersSink(WoocommerceSink):
             mapping["customer_id"] = mapping["customer_id"]
         elif record.get("customer_email"):
             customer = self.get_reference_data("customers", filter={"email": record["customer_email"]})
-            id = next(c["id"] for c in customer)
+            id = next((c["id"] for c in customer), None)
             mapping["customer_id"] = id
         if shipping_address.get("total_shipping"):
             mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]

@@ -41,10 +41,11 @@ class WoocommerceSink(RecordSink, Rest):
         # Add validation logic here
         return payload
 
-    def get_reference_data(self, stream, fields=None):
+    def get_reference_data(self, stream, fields=None, filter={}):
         page = 1
         data = []
         params = {"per_page": 100, "order": "asc", "page": page}
+        params.update(filter)
         while True:
             resp = self.request_api("GET", stream, params)
             total_pages = resp.headers.get("X-WP-TotalPages")

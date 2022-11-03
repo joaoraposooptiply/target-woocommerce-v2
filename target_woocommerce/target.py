@@ -6,9 +6,9 @@ from singer_sdk import typing as th
 from singer_sdk.sinks import Sink
 from singer_sdk.target_base import Target
 
-from target_woocommerce.sinks import ProductSink, UpdateInventorySink
+from target_woocommerce.sinks import ProductSink, UpdateInventorySink, SalesOrdersSink
 
-SINK_TYPES = [ProductSink, UpdateInventorySink]
+SINK_TYPES = [ProductSink, UpdateInventorySink, SalesOrdersSink]
 
 
 class TargetWoocommerce(Target):
