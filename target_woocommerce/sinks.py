@@ -144,16 +144,42 @@ class ProductSink(WoocommerceSink):
         fields = ["id", "name", "slug"]
         return self.get_reference_data(endpoint, fields)
 
+    def get_existing_id(self, variant):
+        if variant.get("id"):
+            resp = self.request_api("GET", "products", {"include": [variant["id"]]})
+            resp = resp.json()
+            if resp:
+                return {k: v for k, v in resp[0].items() if k in ["id", "type"]}
+        if variant.get("sku"):
+            resp = self.request_api("GET", "products", {"sku": variant["sku"]})
+            resp = resp.json()
+            if resp:
+                return {k: v for k, v in resp[0].items() if k in ["id", "type", "parent_id"]}
+
     def preprocess_record(self, record: dict, context: dict) -> dict:
         record = self.validate_input(record)
 
-        prd_type = "variable" if record.get("options") else "simple"
+        for variant in record["variants"]:
+            product_id = self.get_existing_id(variant)
+            if product_id:
+                variant["id"] = product_id["id"]
+                if product_id.get("parent_id"):
+                    record["id"] = product_id["parent_id"]
+                record["type"] = "variable" if product_id["parent_id"] else "simple"
+
+        if not record.get("type"):
+            record["type"] = "variable" if record.get("options") else "simple"
+        
         mapping = {
             "name": record["name"],
             "description": record.get("description"),
             "short_description": record.get("short_description"),
-            "type": prd_type,
+            "type": record["type"],
         }
+
+        if record.get("id"):
+            mapping["id"] = record["id"]
+
         if record.get("image_urls"):
             mapping["images"] = [{"src": i} for i in record["image_urls"]]
 
@@ -165,56 +191,69 @@ class ProductSink(WoocommerceSink):
                 ctg = [{"id": c["id"]} for c in self.categories if c["name"]==ctg["name"]]
                 mapping["categories"] = ctg
 
-        if prd_type == "variable":
+        if record["type"] == "variable":
+
             mapping["variations"] = []
             for variant in record["variants"]:
+                
                 product_var = {
                     "sku": variant.get("sku"),
                     "regular_price": str(variant.get("price")),
                     "manage_stock": True,
                     "stock_quantity": variant.get("available_quantity")
                 }
+
+                if variant.get("id"):
+                    product_var["id"] = variant["id"]
+
                 product_var["attributes"] = []
-                for option in variant["options"]:
-                    product_var["attributes"].append(dict(name=option["name"], option=option["value"]))
+
+                if variant.get("options"):
+                    for option in variant["options"]:
+                        product_var["attributes"].append(dict(name=option["name"], option=option["value"]))
                 mapping["variations"].append(product_var)
             # Process attributes
-            variant_options = []
-            for variant in record["variants"]:
-                variant_options += variant["options"]
-            attributes = []
-            default_attributes = []
-            for option in record["options"]:
-                options = [v["value"] for v in variant_options if v["name"]==option]
-                if not options:
-                    continue
-                default_attribute = dict(option=options[0])
-                attribute = {
-                    "position": 0,
-                    "visible": False,
-                    "variation": True,
-                    "options": options
-                }
-                id = next((a["id"] for a in self.attributes if a["name"]==option), None)
-                if id:
-                    attribute["id"] = id
-                    default_attribute["id"] = id
-                else:
-                    attribute["name"] = option
-                    default_attribute["name"] = option
-                attributes.append(attribute)
-                default_attributes.append(default_attribute)
+            if variant.get("options"):
+                variant_options = []
+                for variant in record["variants"]:
+                    variant_options += variant["options"]
+                attributes = []
+                default_attributes = []
+                for option in record["options"]:
+                    options = [v["value"] for v in variant_options if v["name"]==option]
+                    if not options:
+                        continue
+                    default_attribute = dict(option=options[0])
+                    attribute = {
+                        "position": 0,
+                        "visible": False,
+                        "variation": True,
+                        "options": options
+                    }
+                    id = next((a["id"] for a in self.attributes if a["name"]==option), None)
+                    if id:
+                        attribute["id"] = id
+                        default_attribute["id"] = id
+                    else:
+                        attribute["name"] = option
+                        default_attribute["name"] = option
+                    attributes.append(attribute)
+                    default_attributes.append(default_attribute)
 
-                mapping["attributes"] = attributes
-                mapping["default_attributes"] = default_attributes
+                    mapping["attributes"] = attributes
+                    mapping["default_attributes"] = default_attributes
         else:
             variant = record["variants"][0]
+            product_id = self.get_existing_id(variant)
+
             mapping.update({
                     "sku": variant.get("sku"),
                     "regular_price": str(variant.get("price")),
                     "manage_stock": True,
                     "stock_quantity": variant.get("available_quantity")
                 })
+            if product_id:
+                mapping["id"] = product_id["id"]
 
         return self.validate_output(mapping)
     
@@ -223,20 +262,36 @@ class ProductSink(WoocommerceSink):
         product_id = prod_response["id"]
         url = f"products/{product_id}/variations"
         for variation in record["variations"]:
-            for attr in variation["attributes"]:
-                sel_attr = next(a for a in prod_response["attributes"] if a["name"]==attr["name"])
-                attr["id"] = sel_attr["id"]
-            response = self.request_api("POST", endpoint=url, request_data=variation)
-            variant_response = response.json()
-            self.logger.info(f"Created variant with id: {variant_response['id']}")
+            if "id" in variation:
+                endpoint = f"{url}/{variation['id']}"
+                response = self.request_api("PUT", endpoint=endpoint, request_data=variation)
+                product_response = response.json()
+                id = product_response.get("id")
+                self.logger.info(f"Variation {id} updated.")
+            else:
+                for attr in variation["attributes"]:
+                    sel_attr = next(a for a in prod_response["attributes"] if a["name"]==attr["name"])
+                    attr["id"] = sel_attr["id"]
+                response = self.request_api("POST", endpoint=url, request_data=variation)
+                variant_response = response.json()
+                self.logger.info(f"Created variant with id: {variant_response['id']}")
     
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
-        response = self.request_api("POST", request_data=record)
-        product_response = response.json()
-        id = product_response.get("id")
-        self.logger.info(f"{self.name} created with id: {id}")
-        if record["type"] == "variable":
-            self.process_variation(record, product_response)
+        if "id" in record:
+            endpoint = f"products/{record['id']}"
+            response = self.request_api("PUT", endpoint=endpoint, request_data=record)
+            product_response = response.json()
+            id = product_response.get("id")
+            self.logger.info(f"{self.name} {id} updated.")
+            if record["type"] == "variable":
+                self.process_variation(record, product_response)
+        else:
+            response = self.request_api("POST", request_data=record)
+            product_response = response.json()
+            id = product_response.get("id")
+            self.logger.info(f"{self.name} created with id: {id}")
+            if record["type"] == "variable":
+                self.process_variation(record, product_response)
         
         
