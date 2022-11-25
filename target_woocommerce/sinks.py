@@ -15,9 +15,13 @@ class SalesOrdersSink(WoocommerceSink):
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         record = self.validate_input(record)
-        customer_name = record.get("customer_name", "").split(" ")
-        first_name = customer_name[0]
-        last_name = " ".join(customer_name[1:])
+        if record.get("customer_name"):
+            customer_name = record.get("customer_name").split(" ")
+            first_name = customer_name[0]
+            last_name = " ".join(customer_name[1:])
+        else:
+            first_name = ""
+            last_name = ""
         billing_address = record.get("billing_address", {})
         shipping_address = record.get("shipping_address", {})
         mapping = {
