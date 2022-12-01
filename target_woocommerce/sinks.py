@@ -25,7 +25,6 @@ class SalesOrdersSink(WoocommerceSink):
         billing_address = record.get("billing_address", {})
         shipping_address = record.get("shipping_address", {})
         mapping = {
-            "set_paid": billing_address.get("paid", False),
             "billing": {
                 "first_name": first_name,
                 "last_name": last_name,
@@ -35,8 +34,7 @@ class SalesOrdersSink(WoocommerceSink):
                 "state": billing_address.get("state"),
                 "postcode": billing_address.get("postal_code"),
                 "country": billing_address.get("country"),
-                "email": billing_address.get("customer_email"),
-                "phone": billing_address.get(""),
+                "email": billing_address.get("customer_email")
             },
             "shipping": {
                 "first_name": first_name,
@@ -50,6 +48,13 @@ class SalesOrdersSink(WoocommerceSink):
             },
             "line_items": [],
             }
+        status = record.get("status")
+        if status:
+            mapping["status"] = status
+        if status=="completed":
+            mapping["set_paid"] = True
+        else:
+            mapping["set_paid"] = record.get("paid", False)
         if record.get("customer_id"):
             mapping["customer_id"] = mapping["customer_id"]
         elif record.get("customer_email"):
