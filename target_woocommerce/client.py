@@ -1,8 +1,8 @@
 """WoocommerceSink target sink class, which handles writing streams."""
 
-from typing import Any, Callable, Dict, List, Optional, cast
+import hashlib
+import json
 
-from singer_sdk.plugin_base import PluginBase
 from singer_sdk.sinks import RecordSink
 
 from target_woocommerce.rest import Rest
@@ -61,9 +61,24 @@ class WoocommerceSink(RecordSink, Rest):
                 break
         return data
 
+    def init_state(self):
+        self.latest_state = self.latest_state or {"bookmarks": {}}
+        if self.name not in self.latest_state["bookmarks"]:
+            if not self.latest_state["bookmarks"].get(self.name):
+                self.latest_state["bookmarks"][self.name] = []
 
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
-        response = self.request_api("POST", request_data=record)
-        id = response.json().get("id")
-        self.logger.info(f"{self.name} created with id: {id}")
+        hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
+        self.init_state()
+        state = {"hash": hash}
+        try:
+            response = self.request_api("POST", request_data=record)
+            id = response.json().get("id")
+            state["id"] = id
+            state["success"] = True
+            self.logger.info(f"{self.name} created with id: {id}")
+        except:
+            state["success"] = False
+        self.latest_state["bookmarks"][self.name].append(state)
+
