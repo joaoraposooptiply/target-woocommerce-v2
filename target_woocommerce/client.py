@@ -4,12 +4,23 @@ import hashlib
 import json
 
 from singer_sdk.sinks import RecordSink
+from typing import Dict, List, Optional
 
 from target_woocommerce.rest import Rest
+from singer_sdk.plugin_base import PluginBase
 
 
 class WoocommerceSink(RecordSink, Rest):
     """WoocommerceSink target sink class."""
+    def __init__(
+        self,
+        target: PluginBase,
+        stream_name: str,
+        schema: Dict,
+        key_properties: Optional[List[str]],
+    ) -> None:
+        self._state = dict(target._state)
+        super().__init__(target, stream_name, schema, key_properties)
 
     @property
     def name(self):
@@ -62,7 +73,7 @@ class WoocommerceSink(RecordSink, Rest):
         return data
 
     def init_state(self):
-        self.latest_state = self.latest_state or {"bookmarks": {}}
+        self.latest_state = self._state or {"bookmarks": {}}
         if self.name not in self.latest_state["bookmarks"]:
             if not self.latest_state["bookmarks"].get(self.name):
                 self.latest_state["bookmarks"][self.name] = []
@@ -71,6 +82,11 @@ class WoocommerceSink(RecordSink, Rest):
         """Process the record."""
         hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
         self.init_state()
+        states = self.latest_state["bookmarks"][self.name]
+        existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
+        if existing_state:
+            self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            return
         state = {"hash": hash}
         try:
             response = self.request_api("POST", request_data=record)
@@ -81,4 +97,3 @@ class WoocommerceSink(RecordSink, Rest):
         except:
             state["success"] = False
         self.latest_state["bookmarks"][self.name].append(state)
-
