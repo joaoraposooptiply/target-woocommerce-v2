@@ -21,6 +21,8 @@ class WoocommerceSink(RecordSink, Rest):
     ) -> None:
         self._state = dict(target._state)
         super().__init__(target, stream_name, schema, key_properties)
+    
+    summary_init = False
 
     @property
     def name(self):
@@ -73,10 +75,15 @@ class WoocommerceSink(RecordSink, Rest):
         return data
 
     def init_state(self):
-        self.latest_state = self._state or {"bookmarks": {}}
+        self.latest_state = self._state or {"bookmarks": {}, "summary": {}}
         if self.name not in self.latest_state["bookmarks"]:
             if not self.latest_state["bookmarks"].get(self.name):
                 self.latest_state["bookmarks"][self.name] = []
+        if not self.summary_init:
+            self.latest_state["summary"] = {}
+            if not self.latest_state["summary"].get(self.name):
+                self.latest_state["summary"][self.name] = {"success": 0, "fail": 0, "existing": 0}
+            self.summary_init = True
 
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
@@ -86,6 +93,7 @@ class WoocommerceSink(RecordSink, Rest):
         existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
         if existing_state:
             self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            self.latest_state["summary"][self.name]["existing"] += 1
             return
         state = {"hash": hash}
         try:
@@ -93,7 +101,9 @@ class WoocommerceSink(RecordSink, Rest):
             id = response.json().get("id")
             state["id"] = id
             state["success"] = True
+            self.latest_state["summary"][self.name]["success"] += 1
             self.logger.info(f"{self.name} created with id: {id}")
         except:
             state["success"] = False
+            self.latest_state["summary"][self.name]["fail"] += 1
         self.latest_state["bookmarks"][self.name].append(state)
