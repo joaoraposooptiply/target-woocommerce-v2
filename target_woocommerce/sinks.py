@@ -4,7 +4,8 @@ from target_woocommerce.local_models import UpdateInventory
 
 from target_woocommerce.client import WoocommerceSink
 from backports.cached_property import cached_property
-
+import hashlib
+import json
 
 class SalesOrdersSink(WoocommerceSink):
     """Woocommerce order target sink class."""
@@ -93,16 +94,37 @@ class SalesOrdersSink(WoocommerceSink):
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
         print(record)
-        if "id" in record:
-            endpoint = f"orders/{record['id']}"
-            response = self.request_api("PUT", endpoint=endpoint, request_data=record)
-            order_response = response.json()
-            id = order_response.get("id")
-            self.logger.info(f"{self.name} {id} updated.")
-        else:
-            response = self.request_api("POST", request_data=record)
-            id = response.json().get("id")
-            self.logger.info(f"{self.name} created with id: {id}")
+
+        hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
+        self.init_state()
+        states = self.latest_state["bookmarks"][self.name]
+        existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
+        if existing_state:
+            self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            self.latest_state["summary"][self.name]["existing"] += 1
+            return
+        state = {"hash": hash}
+        try:
+            if "id" in record:
+                endpoint = f"orders/{record['id']}"
+                response = self.request_api("PUT", endpoint=endpoint, request_data=record)
+                order_response = response.json()
+                id = order_response.get("id")
+                self.logger.info(f"{self.name} {id} updated.")
+            
+            else:
+                response = self.request_api("POST", request_data=record)
+                id = response.json().get("id")
+                state["id"] = id
+                state["success"] = True
+                self.latest_state["summary"][self.name]["success"] += 1
+                self.logger.info(f"{self.name} created with id: {id}")
+        except:
+            state["success"] = False
+            self.latest_state["summary"][self.name]["fail"] += 1
+        self.latest_state["bookmarks"][self.name].append(state)
+
+       
         
 
 class UpdateInventorySink(WoocommerceSink):
