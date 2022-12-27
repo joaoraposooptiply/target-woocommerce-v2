@@ -34,6 +34,7 @@ class SalesOrdersSink(WoocommerceSink):
                 "first_name": first_name,
                 "last_name": last_name,
         }
+        # TODO: Define if name should go inside shipping/billing address when there isn't any data
         mapping["shipping_address"] = {
                 "first_name": first_name,
                 "last_name": last_name,
