@@ -82,7 +82,8 @@ class WoocommerceSink(RecordSink, Rest):
         if not self.summary_init:
             self.latest_state["summary"] = {}
             if not self.latest_state["summary"].get(self.name):
-                self.latest_state["summary"][self.name] = {"success": 0, "fail": 0, "existing": 0}
+                self.latest_state["summary"][self.name] = {"success": 0, "fail": 0, "existing": 0, "updated": 0}
+
             self.summary_init = True
 
     def process_record(self, record: dict, context: dict) -> None:

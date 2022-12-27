@@ -35,7 +35,6 @@ class SalesOrdersSink(WoocommerceSink):
                 "first_name": first_name,
                 "last_name": last_name,
         }
-        # TODO: Define if name should go inside shipping/billing address when there isn't any data
         mapping["shipping_address"] = {
                 "first_name": first_name,
                 "last_name": last_name,
@@ -93,10 +92,9 @@ class SalesOrdersSink(WoocommerceSink):
 
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
-        print(record)
-
         hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
-        self.init_state()
+        if not self.latest_state:
+            self.init_state()
         states = self.latest_state["bookmarks"][self.name]
         existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
         if existing_state:
@@ -110,6 +108,10 @@ class SalesOrdersSink(WoocommerceSink):
                 response = self.request_api("PUT", endpoint=endpoint, request_data=record)
                 order_response = response.json()
                 id = order_response.get("id")
+                state["id"] = id
+                state["success"] = True
+                state["updated"] = True
+                self.latest_state["summary"][self.name]["updated"] += 1
                 self.logger.info(f"{self.name} {id} updated.")
             
             else:
