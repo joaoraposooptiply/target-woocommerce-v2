@@ -331,5 +331,3 @@ class ProductSink(WoocommerceSink):
             self.logger.info(f"{self.name} created with id: {id}")
             if record["type"] == "variable":
                 self.process_variation(record, product_response)
-        
-        
