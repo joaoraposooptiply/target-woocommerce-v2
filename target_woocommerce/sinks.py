@@ -63,6 +63,11 @@ class SalesOrdersSink(WoocommerceSink):
             if shipping_address.get("total_shipping"):
                 mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]
         status = record.get("status")
+        fulfilled = record.get("fulfilled")
+        if fulfilled:
+            mapping["status"] = "completed"
+        if fulfilled is False:
+            mapping["status"] = status
         if status:
             mapping["status"] = status
         if status=="completed":
