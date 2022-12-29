@@ -4,7 +4,8 @@ from target_woocommerce.local_models import UpdateInventory
 
 from target_woocommerce.client import WoocommerceSink
 from backports.cached_property import cached_property
-
+import hashlib
+import json
 
 class SalesOrdersSink(WoocommerceSink):
     """Woocommerce order target sink class."""
@@ -22,12 +23,24 @@ class SalesOrdersSink(WoocommerceSink):
         else:
             first_name = ""
             last_name = ""
+        mapping = {
+            "line_items": []
+        }
         billing_address = record.get("billing_address", {})
         shipping_address = record.get("shipping_address", {})
-        mapping = {
-            "billing": {
+        order_id = record.get("id")
+        mapping["id"] = order_id
+        mapping["status"] = record.get("status")
+        mapping["billing_address"] = {
                 "first_name": first_name,
                 "last_name": last_name,
+        }
+        mapping["shipping_address"] = {
+                "first_name": first_name,
+                "last_name": last_name,
+        }
+        if billing_address:
+            mapping["billing_address"] = {
                 "address_1": billing_address.get("line1"),
                 "address_2": billing_address.get("line2"),
                 "city": billing_address.get("city"),
@@ -35,8 +48,9 @@ class SalesOrdersSink(WoocommerceSink):
                 "postcode": billing_address.get("postal_code"),
                 "country": billing_address.get("country"),
                 "email": billing_address.get("customer_email")
-            },
-            "shipping": {
+            }
+        if shipping_address:
+            mapping["shipping_address"] = {
                 "first_name": first_name,
                 "last_name": last_name,
                 "address_1": shipping_address.get("line1"),
@@ -45,10 +59,15 @@ class SalesOrdersSink(WoocommerceSink):
                 "state": shipping_address.get("state"),
                 "postcode": shipping_address.get("postal_code"),
                 "country": shipping_address.get("country"),
-            },
-            "line_items": [],
             }
+            if shipping_address.get("total_shipping"):
+                mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]
         status = record.get("status")
+        fulfilled = record.get("fulfilled")
+        if fulfilled:
+            mapping["status"] = "completed"
+        if fulfilled is False:
+            mapping["status"] = status
         if status:
             mapping["status"] = status
         if status=="completed":
@@ -61,20 +80,59 @@ class SalesOrdersSink(WoocommerceSink):
             customer = self.get_reference_data("customers", filter={"email": record["customer_email"]})
             id = next((c["id"] for c in customer), None)
             mapping["customer_id"] = id
-        if shipping_address.get("total_shipping"):
-            mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]
-        for line in record["line_items"]:
-            if line.get("product_id"):
-                item = {"product_id": line["product_id"], "quantity": line["quantity"]}
-            elif line.get("sku"):
-                product = self.get_reference_data("products", filter={"sku": line["sku"]})
-                id = next(p["id"] for p in product)
-                item = {"product_id": id, "quantity": line["quantity"]}
-            else:
-                raise Exception("Product not found.")
-            mapping["line_items"].append(item)
+        
+        if record["line_items"]:
+            for line in record["line_items"]:
+                if line.get("product_id"):
+                    item = {"product_id": line["product_id"], "quantity": line["quantity"]}
+                elif line.get("sku"):
+                    product = self.get_reference_data("products", filter={"sku": line["sku"]})
+                    id = next(p["id"] for p in product)
+                    item = {"product_id": id, "quantity": line["quantity"]}
+                else:
+                    raise Exception("Product not found.")
+                mapping["line_items"].append(item)
  
         return self.validate_output(mapping)
+
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process the record."""
+        hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
+        if not self.latest_state:
+            self.init_state()
+        states = self.latest_state["bookmarks"][self.name]
+        existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
+        if existing_state:
+            self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            self.latest_state["summary"][self.name]["existing"] += 1
+            return
+        state = {"hash": hash}
+        try:
+            if "id" in record:
+                endpoint = f"orders/{record['id']}"
+                response = self.request_api("PUT", endpoint=endpoint, request_data=record)
+                order_response = response.json()
+                id = order_response.get("id")
+                state["id"] = id
+                state["success"] = True
+                state["updated"] = True
+                self.latest_state["summary"][self.name]["updated"] += 1
+                self.logger.info(f"{self.name} {id} updated.")
+            
+            else:
+                response = self.request_api("POST", request_data=record)
+                id = response.json().get("id")
+                state["id"] = id
+                state["success"] = True
+                self.latest_state["summary"][self.name]["success"] += 1
+                self.logger.info(f"{self.name} created with id: {id}")
+        except:
+            state["success"] = False
+            self.latest_state["summary"][self.name]["fail"] += 1
+        self.latest_state["bookmarks"][self.name].append(state)
+
+       
+        
 
 class UpdateInventorySink(WoocommerceSink):
     """Woocommerce order target sink class."""
