@@ -238,7 +238,7 @@ class TargetWoocommerce(Target):
                     )
 
                 config_files.append(Path(config_path))
-
+            state = None if state == "()" else state
             target = cls(  # type: ignore  # Ignore 'type not callable'
                 config=config_files or None,
                 parse_env_config=parse_env_config,
