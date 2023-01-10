@@ -23,24 +23,21 @@ class SalesOrdersSink(WoocommerceSink):
         else:
             first_name = ""
             last_name = ""
-        mapping = {
-            "line_items": []
-        }
+        mapping = {}
         billing_address = record.get("billing_address", {})
         shipping_address = record.get("shipping_address", {})
-        order_id = record.get("id")
+        order_id = record.get("id") or record.get("order_number")
+        if isinstance(order_id, str):
+            order_id = order_id.replace("#", "")
+            order_id = int(order_id)
+        
         mapping["id"] = order_id
         mapping["status"] = record.get("status")
-        mapping["billing_address"] = {
-                "first_name": first_name,
-                "last_name": last_name,
-        }
-        mapping["shipping_address"] = {
-                "first_name": first_name,
-                "last_name": last_name,
-        }
+      
         if billing_address:
             mapping["billing_address"] = {
+                "first_name": first_name,
+                "last_name": last_name,
                 "address_1": billing_address.get("line1"),
                 "address_2": billing_address.get("line2"),
                 "city": billing_address.get("city"),
@@ -108,7 +105,7 @@ class SalesOrdersSink(WoocommerceSink):
             return
         state = {"hash": hash}
         try:
-            if "id" in record:
+            if "id" in record:  
                 endpoint = f"orders/{record['id']}"
                 response = self.request_api("PUT", endpoint=endpoint, request_data=record)
                 order_response = response.json()
