@@ -79,6 +79,8 @@ class SalesOrdersSink(WoocommerceSink):
             mapping["customer_id"] = id
         
         if record["line_items"]:
+            if "line_items" not in mapping:
+                    mapping['line_items'] = []
             for line in record["line_items"]:
                 if line.get("product_id"):
                     item = {"product_id": line["product_id"], "quantity": line["quantity"]}
