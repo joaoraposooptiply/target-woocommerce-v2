@@ -79,6 +79,8 @@ class SalesOrdersSink(WoocommerceSink):
             mapping["customer_id"] = id
         
         if record["line_items"]:
+            if "line_items" not in mapping:
+                    mapping['line_items'] = []
             for line in record["line_items"]:
                 if line.get("product_id"):
                     item = {"product_id": line["product_id"], "quantity": line["quantity"]}
@@ -88,8 +90,6 @@ class SalesOrdersSink(WoocommerceSink):
                     item = {"product_id": id, "quantity": line["quantity"]}
                 else:
                     raise Exception("Product not found.")
-                if "line_items" not in mapping:
-                    mapping['line_items'] = []
                 mapping["line_items"].append(item)
  
         return self.validate_output(mapping)
