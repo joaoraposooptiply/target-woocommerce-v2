@@ -7,6 +7,13 @@ from backports.cached_property import cached_property
 import hashlib
 import json
 
+class DummySink(WoocommerceSink):
+    """Woocommerce order target sink class."""
+    name = "dummy_sink"
+
+    def process_record(self, record: dict, context: dict) -> None:
+        pass
+
 class SalesOrdersSink(WoocommerceSink):
     """Woocommerce order target sink class."""
 

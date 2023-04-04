@@ -18,7 +18,7 @@ from singer_sdk.mapper import PluginMapper
 from singer_sdk.helpers._secrets import SecretString
 from singer_sdk.helpers._util import read_json_file
 
-from target_woocommerce.sinks import ProductSink, UpdateInventorySink, SalesOrdersSink
+from target_woocommerce.sinks import ProductSink, UpdateInventorySink, SalesOrdersSink, DummySink
 
 SINK_TYPES = [ProductSink, UpdateInventorySink, SalesOrdersSink]
 
@@ -106,7 +106,7 @@ class TargetWoocommerce(Target):
                 for sink_class in SINK_TYPES
                 if sink_class.name.lower() == stream_name.lower()
             ),
-            None,
+            DummySink,
         )
 
     def _process_state_message(self, message_dict: dict) -> None:
