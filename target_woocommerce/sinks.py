@@ -154,8 +154,11 @@ class UpdateInventorySink(WoocommerceSink):
         return self.get_reference_data(endpoint, fields)
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
+        if "product_name" in record.keys():
+            record["name"] = record["product_name"]
         record = self.validate_input(record)
 
+        product = None
         product_id = record.get("id")
         if product_id:
             product = next((p for p in self.products if p["id"]==product_id), None)
