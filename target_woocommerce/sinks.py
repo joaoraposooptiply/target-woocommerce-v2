@@ -7,12 +7,15 @@ from backports.cached_property import cached_property
 import hashlib
 import json
 
+
 class DummySink(WoocommerceSink):
     """Woocommerce order target sink class."""
+
     name = "dummy_sink"
 
     def process_record(self, record: dict, context: dict) -> None:
         pass
+
 
 class SalesOrdersSink(WoocommerceSink):
     """Woocommerce order target sink class."""
@@ -37,12 +40,12 @@ class SalesOrdersSink(WoocommerceSink):
         if isinstance(order_id, str):
             order_id = order_id.replace("#", "")
             order_id = int(order_id)
-        
+
         mapping["id"] = order_id
         mapping["status"] = record.get("status")
-      
+
         if billing_address:
-            mapping["billing_address"] = {
+            mapping["billing"] = {
                 "first_name": first_name,
                 "last_name": last_name,
                 "address_1": billing_address.get("line1"),
@@ -51,10 +54,10 @@ class SalesOrdersSink(WoocommerceSink):
                 "state": billing_address.get("state"),
                 "postcode": billing_address.get("postal_code"),
                 "country": billing_address.get("country"),
-                "email": billing_address.get("customer_email")
+                "email": billing_address.get("customer_email"),
             }
         if shipping_address:
-            mapping["shipping_address"] = {
+            mapping["shipping"] = {
                 "first_name": first_name,
                 "last_name": last_name,
                 "address_1": shipping_address.get("line1"),
@@ -65,7 +68,9 @@ class SalesOrdersSink(WoocommerceSink):
                 "country": shipping_address.get("country"),
             }
             if shipping_address.get("total_shipping"):
-                mapping["shipping_lines"] = [{"total": shipping_address["total_shipping"]}]
+                mapping["shipping_lines"] = [
+                    {"total": shipping_address["total_shipping"]}
+                ]
         status = record.get("status")
         fulfilled = record.get("fulfilled")
         if fulfilled:
@@ -74,31 +79,38 @@ class SalesOrdersSink(WoocommerceSink):
             mapping["status"] = status
         if status:
             mapping["status"] = status
-        if status=="completed":
+        if status == "completed":
             mapping["set_paid"] = True
         else:
             mapping["set_paid"] = record.get("paid", False)
         if record.get("customer_id"):
             mapping["customer_id"] = mapping["customer_id"]
         elif record.get("customer_email"):
-            customer = self.get_reference_data("customers", filter={"email": record["customer_email"]})
+            customer = self.get_reference_data(
+                "customers", filter={"email": record["customer_email"]}
+            )
             id = next((c["id"] for c in customer), None)
             mapping["customer_id"] = id
-        
+
         if record["line_items"]:
             if "line_items" not in mapping:
-                    mapping['line_items'] = []
+                mapping["line_items"] = []
             for line in record["line_items"]:
                 if line.get("product_id"):
-                    item = {"product_id": line["product_id"], "quantity": line["quantity"]}
+                    item = {
+                        "product_id": line["product_id"],
+                        "quantity": line["quantity"],
+                    }
                 elif line.get("sku"):
-                    product = self.get_reference_data("products", filter={"sku": line["sku"]})
+                    product = self.get_reference_data(
+                        "products", filter={"sku": line["sku"]}
+                    )
                     id = next(p["id"] for p in product)
                     item = {"product_id": id, "quantity": line["quantity"]}
                 else:
                     raise Exception("Product not found.")
                 mapping["line_items"].append(item)
- 
+
         return self.validate_output(mapping)
 
     def process_record(self, record: dict, context: dict) -> None:
@@ -107,16 +119,22 @@ class SalesOrdersSink(WoocommerceSink):
         if not self.latest_state:
             self.init_state()
         states = self.latest_state["bookmarks"][self.name]
-        existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
+        existing_state = next(
+            (s for s in states if hash == s.get("hash") and s.get("success")), None
+        )
         if existing_state:
-            self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            self.logger.info(
+                f"Record of type {self.name} already exists with id: {existing_state['id']}"
+            )
             self.latest_state["summary"][self.name]["existing"] += 1
             return
         state = {"hash": hash}
         try:
-            if "id" in record:  
+            if "id" in record:
                 endpoint = f"orders/{record['id']}"
-                response = self.request_api("PUT", endpoint=endpoint, request_data=record)
+                response = self.request_api(
+                    "PUT", endpoint=endpoint, request_data=record
+                )
                 order_response = response.json()
                 id = order_response.get("id")
                 state["id"] = id
@@ -124,7 +142,7 @@ class SalesOrdersSink(WoocommerceSink):
                 state["updated"] = True
                 self.latest_state["summary"][self.name]["updated"] += 1
                 self.logger.info(f"{self.name} {id} updated.")
-            
+
             else:
                 response = self.request_api("POST", request_data=record)
                 id = response.json().get("id")
@@ -137,8 +155,6 @@ class SalesOrdersSink(WoocommerceSink):
             self.latest_state["summary"][self.name]["fail"] += 1
         self.latest_state["bookmarks"][self.name].append(state)
 
-       
-        
 
 class UpdateInventorySink(WoocommerceSink):
     """Woocommerce order target sink class."""
@@ -161,13 +177,13 @@ class UpdateInventorySink(WoocommerceSink):
         product = None
         product_id = record.get("id")
         if product_id:
-            product = next((p for p in self.products if p["id"]==product_id), None)
+            product = next((p for p in self.products if p["id"] == product_id), None)
         elif record.get("sku"):
             sku = record.get("sku")
-            product = next((p for p in self.products if p["sku"]==sku), None)
+            product = next((p for p in self.products if p["sku"] == sku), None)
         elif record.get("name"):
             name = record.get("name")
-            product = next((p for p in self.products if p["name"]==name), None)
+            product = next((p for p in self.products if p["name"] == name), None)
 
         if product:
             in_stock = True
@@ -191,7 +207,7 @@ class UpdateInventorySink(WoocommerceSink):
             raise Exception("Could not find product with through id, sku or name.")
 
         return self.validate_output(product)
-    
+
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
         endpoint = self.endpoint.format(id=record["id"])
@@ -230,12 +246,14 @@ class ProductSink(WoocommerceSink):
             resp = self.request_api("GET", "products", {"sku": variant["sku"]})
             resp = resp.json()
             if resp:
-                return {k: v for k, v in resp[0].items() if k in ["id", "type", "parent_id"]}
+                return {
+                    k: v for k, v in resp[0].items() if k in ["id", "type", "parent_id"]
+                }
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         record = self.validate_input(record)
 
-        for variant in record["variants"]:
+        for variant in record.get("variants") or []:
             product_id = self.get_existing_id(variant)
             if product_id:
                 variant["id"] = product_id["id"]
@@ -245,7 +263,7 @@ class ProductSink(WoocommerceSink):
 
         if not record.get("type"):
             record["type"] = "variable" if record.get("options") else "simple"
-        
+
         mapping = {
             "name": record["name"],
             "description": record.get("description"),
@@ -264,19 +282,33 @@ class ProductSink(WoocommerceSink):
             if ctg.get("id"):
                 mapping["categories"] = [{"id": ctg["id"]}]
             else:
-                ctg = [{"id": c["id"]} for c in self.categories if c["name"]==ctg["name"]]
+                ctg = [
+                    {"id": c["id"]} for c in self.categories if c["name"] == ctg["name"]
+                ]
                 mapping["categories"] = ctg
+        elif record.get("categories"):
+            categories = record["categories"]
+            mapping["categories"] = []
+
+            for ctg in categories:
+                if ctg.get("id"):
+                    mapping["categories"].append({"id": ctg["id"]})
+                else:
+                    ctg = [
+                        {"id": c["id"]}
+                        for c in self.categories
+                        if c["name"] == ctg["name"]
+                    ]
+                    mapping["categories"] += ctg
 
         if record["type"] == "variable":
-
             mapping["variations"] = []
             for variant in record["variants"]:
-                
                 product_var = {
                     "sku": variant.get("sku"),
                     "regular_price": str(variant.get("price")),
                     "manage_stock": True,
-                    "stock_quantity": variant.get("available_quantity")
+                    "stock_quantity": variant.get("available_quantity"),
                 }
 
                 if variant.get("id"):
@@ -286,7 +318,9 @@ class ProductSink(WoocommerceSink):
 
                 if variant.get("options"):
                     for option in variant["options"]:
-                        product_var["attributes"].append(dict(name=option["name"], option=option["value"]))
+                        product_var["attributes"].append(
+                            dict(name=option["name"], option=option["value"])
+                        )
                 mapping["variations"].append(product_var)
             # Process attributes
             if variant.get("options"):
@@ -296,7 +330,9 @@ class ProductSink(WoocommerceSink):
                 attributes = []
                 default_attributes = []
                 for option in record["options"]:
-                    options = [v["value"] for v in variant_options if v["name"]==option]
+                    options = [
+                        v["value"] for v in variant_options if v["name"] == option
+                    ]
                     if not options:
                         continue
                     default_attribute = dict(option=options[0])
@@ -304,9 +340,11 @@ class ProductSink(WoocommerceSink):
                         "position": 0,
                         "visible": False,
                         "variation": True,
-                        "options": options
+                        "options": options,
                     }
-                    id = next((a["id"] for a in self.attributes if a["name"]==option), None)
+                    id = next(
+                        (a["id"] for a in self.attributes if a["name"] == option), None
+                    )
                     if id:
                         attribute["id"] = id
                         default_attribute["id"] = id
@@ -319,20 +357,23 @@ class ProductSink(WoocommerceSink):
                     mapping["attributes"] = attributes
                     mapping["default_attributes"] = default_attributes
         else:
-            variant = record["variants"][0]
-            product_id = self.get_existing_id(variant)
+            if record.get("variants") and len(record["variants"]) > 0:
+                variant = record["variants"][0]
+                product_id = self.get_existing_id(variant)
 
-            mapping.update({
-                    "sku": variant.get("sku"),
-                    "regular_price": str(variant.get("price")),
-                    "manage_stock": True,
-                    "stock_quantity": variant.get("available_quantity")
-                })
-            if product_id:
-                mapping["id"] = product_id["id"]
+                mapping.update(
+                    {
+                        "sku": variant.get("sku"),
+                        "regular_price": str(variant.get("price")),
+                        "manage_stock": True,
+                        "stock_quantity": variant.get("available_quantity"),
+                    }
+                )
+                if product_id:
+                    mapping["id"] = product_id["id"]
 
         return self.validate_output(mapping)
-    
+
     def process_variation(self, record: dict, prod_response) -> None:
         """Process the record."""
         product_id = prod_response["id"]
@@ -340,18 +381,26 @@ class ProductSink(WoocommerceSink):
         for variation in record["variations"]:
             if "id" in variation:
                 endpoint = f"{url}/{variation['id']}"
-                response = self.request_api("PUT", endpoint=endpoint, request_data=variation)
+                response = self.request_api(
+                    "PUT", endpoint=endpoint, request_data=variation
+                )
                 product_response = response.json()
                 id = product_response.get("id")
                 self.logger.info(f"Variation {id} updated.")
             else:
                 for attr in variation["attributes"]:
-                    sel_attr = next(a for a in prod_response["attributes"] if a["name"]==attr["name"])
+                    sel_attr = next(
+                        a
+                        for a in prod_response["attributes"]
+                        if a["name"] == attr["name"]
+                    )
                     attr["id"] = sel_attr["id"]
-                response = self.request_api("POST", endpoint=url, request_data=variation)
+                response = self.request_api(
+                    "POST", endpoint=url, request_data=variation
+                )
                 variant_response = response.json()
                 self.logger.info(f"Created variant with id: {variant_response['id']}")
-    
+
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
         if "id" in record:
