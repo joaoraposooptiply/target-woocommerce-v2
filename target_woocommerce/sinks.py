@@ -343,7 +343,7 @@ class ProductSink(WoocommerceSink):
                 product_var = {
                     "sku": variant.get("sku"),
                     "regular_price": str(variant.get("price")),
-                    "sale_price": str(variant.get("cost")),
+                    "sale_price": str(variant.get("sale_price")),
                     "manage_stock": True,
                     "stock_quantity": variant.get("available_quantity"),
                     "weight": variant.get("weight"),
