@@ -301,6 +301,7 @@ class ProductSink(WoocommerceSink):
 
         mapping = {
             "name": record["name"],
+            "sku": record.get("sku"),
             "description": record.get("description"),
             "short_description": record.get("short_description"),
             "type": record["type"],
@@ -342,9 +343,11 @@ class ProductSink(WoocommerceSink):
                 product_var = {
                     "sku": variant.get("sku"),
                     "regular_price": str(variant.get("price")),
+                    "sale_price": str(variant.get("cost")),
                     "manage_stock": True,
                     "stock_quantity": variant.get("available_quantity"),
                     "weight": variant.get("weight"),
+                    "description": variant.get("description"),
                     "dimensions": {
                         "width": variant.get("width"),
                         "length": variant.get("length"),
