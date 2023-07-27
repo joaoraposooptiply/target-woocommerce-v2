@@ -344,6 +344,12 @@ class ProductSink(WoocommerceSink):
                     "regular_price": str(variant.get("price")),
                     "manage_stock": True,
                     "stock_quantity": variant.get("available_quantity"),
+                    "weight": variant.get("weight"),
+                    "dimensions": {
+                        "width": variant.get("width"),
+                        "length": variant.get("length"),
+                        "height": variant.get("depth")
+                    }
                 }
 
                 if variant.get("id"):
@@ -402,6 +408,12 @@ class ProductSink(WoocommerceSink):
                         "regular_price": str(variant.get("price")),
                         "manage_stock": True,
                         "stock_quantity": variant.get("available_quantity"),
+                        "weight": variant.get("weight"),
+                        "dimensions": {
+                            "width": variant.get("width"),
+                            "length": variant.get("length"),
+                            "height": variant.get("depth")
+                        }
                     }
                 )
                 if product_id:
