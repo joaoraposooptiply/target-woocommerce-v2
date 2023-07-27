@@ -6,6 +6,7 @@ class UpdateInventory(BaseModel):
     sku: Optional[str]
     name: Optional[str]
     operation: Optional[str]
+    parent_id: Optional[str]
     quantity: int
 
     class Stream:

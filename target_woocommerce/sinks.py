@@ -166,8 +166,28 @@ class UpdateInventorySink(WoocommerceSink):
     @cached_property
     def products(self):
         endpoint = "products"
-        fields = ["id", "name", "sku", "stock_quantity"]
+        fields = ["id", "name", "sku", "stock_quantity", "type"]
         return self.get_reference_data(endpoint, fields)
+
+    @cached_property
+    def product_variants(self):
+        variants = []
+        products = self.products
+        fields = ["id", "name", "sku", "stock_quantity"]
+
+        for product in products:
+            if product["type"] != "variable":
+                continue
+
+            parent_id = product['id']
+            data = self.get_reference_data(f"products/{parent_id}/variations", fields)
+            for d in data:
+                # save the parent_id so we know it is a variant
+                d["parent_id"] = parent_id
+            variants += data
+
+        return variants
+
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         if "product_name" in record.keys():
@@ -185,6 +205,17 @@ class UpdateInventorySink(WoocommerceSink):
             name = record.get("name")
             product = next((p for p in self.products if p["name"] == name), None)
 
+        if not product:
+            # If it didn't work with main products, check the variants
+            if product_id:
+                product = next((p for p in self.product_variants if p["id"] == product_id), None)
+            elif record.get("sku"):
+                sku = record.get("sku")
+                product = next((p for p in self.product_variants if p["sku"] == sku), None)
+            elif record.get("name"):
+                name = record.get("name")
+                product = next((p for p in self.product_variants if p["name"] == name), None)
+
         if product:
             in_stock = True
             current_stock = product.get("stock_quantity", 0)
@@ -200,7 +231,7 @@ class UpdateInventorySink(WoocommerceSink):
                 {
                     "stock_quantity": current_stock,
                     "manage_stock": True,
-                    "in_stock": in_stock,
+                    "in_stock": in_stock
                 }
             )
         else:
@@ -210,7 +241,11 @@ class UpdateInventorySink(WoocommerceSink):
 
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
-        endpoint = self.endpoint.format(id=record["id"])
+        if record.get("parent_id"):
+            endpoint = self.endpoint.format(id=record["parent_id"]) + "/variations/" + str(record["id"])
+        else:
+            endpoint = self.endpoint.format(id=record["id"])
+
         response = self.request_api("PUT", endpoint, request_data=record)
         product_response = response.json()
         id = product_response.get("id")
