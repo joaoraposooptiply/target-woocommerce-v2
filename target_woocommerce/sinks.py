@@ -1,11 +1,13 @@
 """Woocommerce target sink class, which handles writing streams."""
+import re
+import json
+import hashlib
+
 from hotglue_models_ecommerce.ecommerce import SalesOrder, Product
 from target_woocommerce.local_models import UpdateInventory
 
 from target_woocommerce.client import WoocommerceSink
 from backports.cached_property import cached_property
-import hashlib
-import json
 
 
 class DummySink(WoocommerceSink):
@@ -180,13 +182,20 @@ class UpdateInventorySink(WoocommerceSink):
                 continue
 
             parent_id = product['id']
-            data = self.get_reference_data(f"products/{parent_id}/variations", fields)
+            data = self.get_reference_data(
+                f"products/{parent_id}/variations",
+                fields,
+                fallback_url="products/"
+            )
             for d in data:
                 # save the parent_id so we know it is a variant
                 d["parent_id"] = parent_id
             variants += data
 
         return variants
+
+    def _get_alnum_string(self, input):
+        return re.sub(r'\W+', '', input)
 
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
@@ -215,6 +224,13 @@ class UpdateInventorySink(WoocommerceSink):
             elif record.get("name"):
                 name = record.get("name")
                 product = next((p for p in self.product_variants if p["name"] == name), None)
+            
+            if not product and record.get("name"):
+                # Some items may vary on naming and special characters
+                product = next((
+                    p for p in self.product_variants
+                    if self._get_alnum_string(p["name"]) == self._get_alnum_string(name)
+                ), None)
 
         if product:
             in_stock = True
@@ -235,7 +251,9 @@ class UpdateInventorySink(WoocommerceSink):
                 }
             )
         else:
-            raise Exception("Could not find product with through id, sku or name.")
+            raise Exception(
+                f"Could not find product with through id, sku or name. Failing product: {record}"
+            )
 
         return self.validate_output(product)
 

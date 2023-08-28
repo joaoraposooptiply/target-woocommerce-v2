@@ -54,7 +54,26 @@ class WoocommerceSink(RecordSink, Rest):
         # Add validation logic here
         return payload
 
-    def get_reference_data(self, stream, fields=None, filter={}):
+    def check_payload_for_fields(self, payload, fields):
+        return all([field in payload for field in fields])
+    
+    def get_if_missing_fields(self, response, fields, fallback_url):
+        if fallback_url is None:
+            return response
+
+        modified_response = []
+        for resp in response:
+            if not self.check_payload_for_fields(resp, fields):
+                modified_response.append(
+                    self.request_api("GET", f"{fallback_url}{resp['id']}").json()
+                )
+            else:
+                modified_response.append(
+                    response
+                )
+        return modified_response
+
+    def get_reference_data(self, stream, fields=None, filter={}, fallback_url=None):
         page = 1
         data = []
         params = {"per_page": 100, "order": "asc", "page": page}
@@ -64,7 +83,7 @@ class WoocommerceSink(RecordSink, Rest):
             total_pages = resp.headers.get("X-WP-TotalPages")
             resp = resp.json()
             if fields:
-                resp = [{k:v for k, v in r.items() if k in fields} for r in resp]
+                resp = [{k:v for k, v in r.items() if k in fields} for r in self.get_if_missing_fields(resp, fields, fallback_url)]
             data += resp
 
             if resp and int(total_pages) > page:
