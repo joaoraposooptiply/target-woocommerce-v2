@@ -18,8 +18,8 @@ class Rest:
 
     @property
     def authenticator(self):
-        user=self.config.get("consumer_key")
-        passwd=self.config.get("consumer_secret")
+        user = self.config.get("consumer_key")
+        passwd = self.config.get("consumer_secret")
         token = b64encode(f"{user}:{passwd}".encode()).decode()
         return f"Basic {token}"
 

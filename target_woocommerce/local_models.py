@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 
+
 class UpdateInventory(BaseModel):
     id: Optional[str]
     sku: Optional[str]

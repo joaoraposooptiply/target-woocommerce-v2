@@ -18,11 +18,17 @@ from singer_sdk.mapper import PluginMapper
 from singer_sdk.helpers._secrets import SecretString
 from singer_sdk.helpers._util import read_json_file
 
-from target_woocommerce.sinks import ProductSink, UpdateInventorySink, SalesOrdersSink, DummySink
+from target_woocommerce.sinks import (
+    ProductSink,
+    UpdateInventorySink,
+    SalesOrdersSink,
+    DummySink,
+)
 
 SINK_TYPES = [ProductSink, UpdateInventorySink, SalesOrdersSink]
 
 _MAX_PARALLELISM = 8
+
 
 class TargetWoocommerce(Target):
     """Sample target for Woocommerce."""
@@ -32,7 +38,7 @@ class TargetWoocommerce(Target):
         config: Optional[Union[dict, PurePath, str, List[Union[PurePath, str]]]] = None,
         parse_env_config: bool = False,
         validate_config: bool = True,
-        state: str = None
+        state: str = None,
     ) -> None:
         """Initialize the target.
 
@@ -95,7 +101,7 @@ class TargetWoocommerce(Target):
     config_jsonschema = th.PropertiesList(
         th.Property("consumer_key", th.StringType, required=True),
         th.Property("consumer_secret", th.StringType, required=True),
-        th.Property("site_url", th.StringType, required=True)
+        th.Property("site_url", th.StringType, required=True),
     ).to_dict()
 
     def get_sink_class(self, stream_name: str) -> Type[Sink]:
@@ -160,7 +166,6 @@ class TargetWoocommerce(Target):
                 self.drain_one(sink)
 
             self._latest_state = sink.latest_state
-            
 
     @classproperty
     def cli(cls) -> Callable:
