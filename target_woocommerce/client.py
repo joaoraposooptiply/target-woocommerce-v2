@@ -12,6 +12,7 @@ from singer_sdk.plugin_base import PluginBase
 
 class WoocommerceSink(RecordSink, Rest):
     """WoocommerceSink target sink class."""
+
     def __init__(
         self,
         target: PluginBase,
@@ -21,7 +22,7 @@ class WoocommerceSink(RecordSink, Rest):
     ) -> None:
         self._state = dict(target._state)
         super().__init__(target, stream_name, schema, key_properties)
-    
+
     summary_init = False
 
     @property
@@ -56,7 +57,7 @@ class WoocommerceSink(RecordSink, Rest):
 
     def check_payload_for_fields(self, payload, fields):
         return all([field in payload for field in fields])
-    
+
     def get_if_missing_fields(self, response, fields, fallback_url):
         if fallback_url is None:
             return response
@@ -68,9 +69,7 @@ class WoocommerceSink(RecordSink, Rest):
                     self.request_api("GET", f"{fallback_url}{resp['id']}").json()
                 )
             else:
-                modified_response.append(
-                    response
-                )
+                modified_response.append(response)
         return modified_response
 
     def get_reference_data(self, stream, fields=None, filter={}, fallback_url=None):
@@ -83,7 +82,10 @@ class WoocommerceSink(RecordSink, Rest):
             total_pages = resp.headers.get("X-WP-TotalPages")
             resp = resp.json()
             if fields:
-                resp = [{k:v for k, v in r.items() if k in fields} for r in self.get_if_missing_fields(resp, fields, fallback_url)]
+                resp = [
+                    {k: v for k, v in r.items() if k in fields}
+                    for r in self.get_if_missing_fields(resp, fields, fallback_url)
+                ]
             data += resp
 
             if resp and int(total_pages) > page:
@@ -101,7 +103,12 @@ class WoocommerceSink(RecordSink, Rest):
         if not self.summary_init:
             self.latest_state["summary"] = {}
             if not self.latest_state["summary"].get(self.name):
-                self.latest_state["summary"][self.name] = {"success": 0, "fail": 0, "existing": 0, "updated": 0}
+                self.latest_state["summary"][self.name] = {
+                    "success": 0,
+                    "fail": 0,
+                    "existing": 0,
+                    "updated": 0,
+                }
 
             self.summary_init = True
 
@@ -110,9 +117,13 @@ class WoocommerceSink(RecordSink, Rest):
         hash = hashlib.sha256(json.dumps(record).encode()).hexdigest()
         self.init_state()
         states = self.latest_state["bookmarks"][self.name]
-        existing_state = next((s for s in states if hash==s.get("hash") and s.get("success")), None)
+        existing_state = next(
+            (s for s in states if hash == s.get("hash") and s.get("success")), None
+        )
         if existing_state:
-            self.logger.info(f"Record of type {self.name} already exists with id: {existing_state['id']}")
+            self.logger.info(
+                f"Record of type {self.name} already exists with id: {existing_state['id']}"
+            )
             self.latest_state["summary"][self.name]["existing"] += 1
             return
         state = {"hash": hash}

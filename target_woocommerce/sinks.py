@@ -181,11 +181,9 @@ class UpdateInventorySink(WoocommerceSink):
             if product["type"] != "variable":
                 continue
 
-            parent_id = product['id']
+            parent_id = product["id"]
             data = self.get_reference_data(
-                f"products/{parent_id}/variations",
-                fields,
-                fallback_url="products/"
+                f"products/{parent_id}/variations", fields, fallback_url="products/"
             )
             for d in data:
                 # save the parent_id so we know it is a variant
@@ -195,8 +193,7 @@ class UpdateInventorySink(WoocommerceSink):
         return variants
 
     def _get_alnum_string(self, input):
-        return re.sub(r'\W+', '', input)
-
+        return re.sub(r"\W+", "", input)
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         if "product_name" in record.keys():
@@ -217,26 +214,39 @@ class UpdateInventorySink(WoocommerceSink):
         if not product:
             # If it didn't work with main products, check the variants
             if product_id:
-                product = next((p for p in self.product_variants if p["id"] == product_id), None)
+                product = next(
+                    (p for p in self.product_variants if p["id"] == product_id), None
+                )
             elif record.get("sku"):
                 sku = record.get("sku")
-                product = next((p for p in self.product_variants if p["sku"] == sku), None)
+                product = next(
+                    (p for p in self.product_variants if p["sku"] == sku), None
+                )
             elif record.get("name"):
                 name = record.get("name")
-                product = next((p for p in self.product_variants if p["name"] == name), None)
-            
+                product = next(
+                    (p for p in self.product_variants if p["name"] == name), None
+                )
+
             if not product and record.get("name"):
                 # Some items may vary on naming and special characters
-                product = next((
-                    p for p in self.product_variants
-                    if self._get_alnum_string(p["name"]) == self._get_alnum_string(name)
-                ), None)
+                product = next(
+                    (
+                        p
+                        for p in self.product_variants
+                        if self._get_alnum_string(p["name"])
+                        == self._get_alnum_string(name)
+                    ),
+                    None,
+                )
 
         if product:
             in_stock = True
             current_stock = product.get("stock_quantity", 0)
             if record["operation"] == "subtract":
                 current_stock = current_stock - int(record["quantity"])
+            if record["operation"] == "set":
+                current_stock = int(record["quantity"])
             else:
                 current_stock = current_stock + int(record["quantity"])
 
@@ -247,7 +257,7 @@ class UpdateInventorySink(WoocommerceSink):
                 {
                     "stock_quantity": current_stock,
                     "manage_stock": True,
-                    "in_stock": in_stock
+                    "in_stock": in_stock,
                 }
             )
         else:
@@ -260,7 +270,11 @@ class UpdateInventorySink(WoocommerceSink):
     def process_record(self, record: dict, context: dict) -> None:
         """Process the record."""
         if record.get("parent_id"):
-            endpoint = self.endpoint.format(id=record["parent_id"]) + "/variations/" + str(record["id"])
+            endpoint = (
+                self.endpoint.format(id=record["parent_id"])
+                + "/variations/"
+                + str(record["id"])
+            )
         else:
             endpoint = self.endpoint.format(id=record["id"])
 
@@ -369,8 +383,8 @@ class ProductSink(WoocommerceSink):
                     "dimensions": {
                         "width": variant.get("width"),
                         "length": variant.get("length"),
-                        "height": variant.get("depth")
-                    }
+                        "height": variant.get("depth"),
+                    },
                 }
 
                 if variant.get("id"):
@@ -433,8 +447,8 @@ class ProductSink(WoocommerceSink):
                         "dimensions": {
                             "width": variant.get("width"),
                             "length": variant.get("length"),
-                            "height": variant.get("depth")
-                        }
+                            "height": variant.get("depth"),
+                        },
                     }
                 )
                 if product_id:
