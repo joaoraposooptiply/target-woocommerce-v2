@@ -3,7 +3,7 @@ import re
 import json
 import hashlib
 
-from hotglue_models_ecommerce.ecommerce import SalesOrder, Product
+from hotglue_models_ecommerce.ecommerce import SalesOrder, Product, OrderNote
 from target_woocommerce.local_models import UpdateInventory
 
 from target_woocommerce.client import WoocommerceSink
@@ -500,3 +500,41 @@ class ProductSink(WoocommerceSink):
             self.logger.info(f"{self.name} created with id: {id}")
             if record["type"] == "variable":
                 self.process_variation(record, product_response)
+
+class OrderNotesSink(WoocommerceSink):
+    """Woocommerce order target sink class."""
+
+    endpoint = "orders/{order_id}/notes"
+    unified_schema = OrderNote
+    name = OrderNote.Stream.name
+
+    def preprocess_record(self, record: dict, context: dict) -> dict:
+        record = self.validate_input(record)
+        #Going to skip id because could not find PUT/Update endpoint for Notes
+        mapping = {
+          "order_id": record.get("order_id"),
+          "author": record.get("author_name"),
+          "note": record.get("note"),
+          "date_created": record.get("created_at"),
+        }
+        if "customer_note" in record: 
+            try:
+                mapping['customer_note'] = record.get("customer_note").lower() == "true"
+            except:
+                mapping['customer_note'] = False
+
+
+        return self.validate_output(mapping)
+    
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process the record."""
+        if "order_id" in record:
+            endpoint = f"orders/{record['order_id']}/notes"
+            response = self.request_api("POST", endpoint=endpoint, request_data=record)
+            product_response = response.json()
+            id = product_response.get("id")
+            self.logger.info(f"{self.name} {id} added.")
+            
+        else:
+            
+            self.logger.warn(f"{self.name} had no order_id skipped note {record.get('note')}")

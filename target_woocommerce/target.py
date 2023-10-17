@@ -23,9 +23,10 @@ from target_woocommerce.sinks import (
     UpdateInventorySink,
     SalesOrdersSink,
     DummySink,
+    OrderNotesSink,
 )
 
-SINK_TYPES = [ProductSink, UpdateInventorySink, SalesOrdersSink]
+SINK_TYPES = [ProductSink, UpdateInventorySink, SalesOrdersSink,OrderNotesSink]
 
 _MAX_PARALLELISM = 8
 
