@@ -507,6 +507,7 @@ class OrderNotesSink(WoocommerceSink):
     endpoint = "orders/{order_id}/notes"
     unified_schema = OrderNote
     name = OrderNote.Stream.name
+    available_names = [OrderNote.Stream.name, "OrderNote"]
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         record = self.validate_input(record)
@@ -517,9 +518,9 @@ class OrderNotesSink(WoocommerceSink):
           "note": record.get("note"),
           "date_created": record.get("created_at"),
         }
-        if "customer_note" in record: 
+        if "customer_note" in record:
             try:
-                mapping['customer_note'] = record.get("customer_note").lower() == "true"
+                mapping['customer_note'] = record.get("customer_note")
             except:
                 mapping['customer_note'] = False
 

@@ -24,6 +24,7 @@ class WoocommerceSink(RecordSink, Rest):
         super().__init__(target, stream_name, schema, key_properties)
 
     summary_init = False
+    available_names = []
 
     @property
     def name(self):
