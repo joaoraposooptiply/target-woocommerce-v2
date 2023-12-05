@@ -111,7 +111,7 @@ class TargetWoocommerce(Target):
             (
                 sink_class
                 for sink_class in SINK_TYPES
-                if sink_class.name.lower() == stream_name.lower()
+                if sink_class.name.lower() == stream_name.lower() or stream_name in sink_class.available_names
             ),
             DummySink,
         )
