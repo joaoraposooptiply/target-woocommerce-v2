@@ -9,6 +9,7 @@ from singer_sdk.plugin_base import PluginBase
 from target_hotglue.client import HotglueSink
 from base64 import b64encode
 from random_user_agent.user_agent import UserAgent
+import requests
 
 MAX_PARALLELISM = 10
 
@@ -86,46 +87,97 @@ class WoocommerceSink(HotglueSink):
         return all([field in payload for field in fields])
 
     def get_if_missing_fields(self, response, fields, fallback_url):
-        if fallback_url is None:
+        try:
+            if fallback_url is None:
+                return response
+
+            modified_response = []
+            for resp in response:
+                try:
+                    if not self.check_payload_for_fields(resp, fields):
+                        modified_response.append(
+                            self.request_api("GET", f"{fallback_url}{resp['id']}").json()
+                        )
+                    else:
+                        modified_response.append(resp)
+                except Exception as e:
+                    self.logger.error(f"Failed to get missing fields for response {resp.get('id', 'unknown')}: {str(e)}")
+                    # Keep the original response if we can't get the missing fields
+                    modified_response.append(resp)
+            return modified_response
+        except Exception as e:
+            self.logger.error(f"Failed to get missing fields: {str(e)}")
+            # Return original response if we can't process missing fields
             return response
 
-        modified_response = []
-        for resp in response:
-            if not self.check_payload_for_fields(resp, fields):
-                modified_response.append(
-                    self.request_api("GET", f"{fallback_url}{resp['id']}").json()
-                )
-            else:
-                modified_response.append(resp)
-        return modified_response
-
     def get_reference_data(self, stream, fields=None, filter={}, fallback_url=None):
-        self.logger.info(f"Getting reference data for {stream}")
-        page = 1
-        data = []
-        params = {"per_page": 100, "order": "asc", "page": page}
-        params.update(filter)
-        while True:
-            resp = self.request_api("GET", stream, params)
-            total_pages = resp.headers.get("X-WP-TotalPages")
-            resp = resp.json()
-            if fields:
-                resp = [
-                    {k: v for k, v in r.items() if k in fields}
-                    for r in self.get_if_missing_fields(resp, fields, fallback_url)
-                ]
-            data += resp
+        try:
+            self.logger.info(f"Getting reference data for {stream}")
+            page = 1
+            data = []
+            params = {"per_page": 100, "order": "asc", "page": page}
+            params.update(filter)
+            while True:
+                try:
+                    resp = self.request_api("GET", stream, params)
+                    total_pages = resp.headers.get("X-WP-TotalPages")
+                    resp = resp.json()
+                    if fields:
+                        resp = [
+                            {k: v for k, v in r.items() if k in fields}
+                            for r in self.get_if_missing_fields(resp, fields, fallback_url)
+                        ]
+                    data += resp
 
-            if page % 10 == 0:
-                self.logger.info(f"Fetched {len(data)} records for {stream} page {page}")
+                    if page % 10 == 0:
+                        self.logger.info(f"Fetched {len(data)} records for {stream} page {page}")
 
-            if resp and int(total_pages) > page:
-                page += 1
-                params.update({"page": page})
+                    if resp and int(total_pages) > page:
+                        page += 1
+                        params.update({"page": page})
+                    else:
+                        break
+                except Exception as e:
+                    self.logger.error(f"Failed to fetch page {page} for {stream}: {str(e)}")
+                    # Continue with next page instead of stopping
+                    break
+                    
+            self.logger.info(f"Reference data for {stream} fetched successfully. {len(data)} records found.")
+            return data
+        except Exception as e:
+            self.logger.error(f"Failed to get reference data for {stream}: {str(e)}")
+            # Return empty list instead of raising exception
+            return []
+
+    def request_api(self, method, endpoint=None, params=None, request_data=None):
+        """Make API request with error handling."""
+        try:
+            url = self.url(endpoint)
+            headers = self.http_headers
+            
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params)
+            elif method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=request_data, params=params)
+            elif method.upper() == "PUT":
+                response = requests.put(url, headers=headers, json=request_data, params=params)
             else:
-                break
-        self.logger.info(f"Reference data for {stream} fetched successfully. {len(data)} records found.")
-        return data
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            # Check for HTTP errors
+            response.raise_for_status()
+            return response
+            
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"API request failed: {method} {url}")
+            self.logger.error(f"Error: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                self.logger.error(f"Response status: {e.response.status_code}")
+                self.logger.error(f"Response content: {e.response.text}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Unexpected error in API request: {str(e)}")
+            raise
 
     @staticmethod
     def clean_dict_items(dict):
