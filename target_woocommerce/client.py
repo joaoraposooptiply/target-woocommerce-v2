@@ -137,7 +137,7 @@ class WoocommerceSink(HotglueSink):
             self.logger.info(f"Getting reference data for {stream}")
             page = 1
             data = []
-            params = {"per_page": 100, "order": "asc", "page": page}
+            params = {"per_page": 100, "order": "asc", "page": page, "status": "any"}
             params.update(filter)
             while True:
                 try:
