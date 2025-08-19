@@ -111,6 +111,20 @@ class SalesOrdersSink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process a single record with proper error handling."""
+        try:
+            # Preprocess the record
+            preprocessed_record = self.preprocess_record(record, context)
+            
+            # Process the preprocessed record
+            return self.upsert_record(preprocessed_record, context)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            self.logger.error(f"Record data: {record}")
+            return None, False, {"error": str(e)}
+
     def upsert_record(self, record: dict, context: dict) -> None:
         try:
             if "id" in record:
@@ -270,14 +284,28 @@ class UpdateInventorySink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process a single record with proper error handling."""
+        try:
+            # Preprocess the record
+            preprocessed_record = self.preprocess_record(record, context)
+            
+            # If preprocessing failed (returned None), skip this record
+            if preprocessed_record is None:
+                self.logger.warning(f"Skipping {self.name} record as preprocessing failed")
+                return None, False, {"error": "Record preprocessing failed"}
+            
+            # Process the preprocessed record
+            return self.upsert_record(preprocessed_record, context)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            self.logger.error(f"Record data: {record}")
+            return None, False, {"error": str(e)}
+
     def upsert_record(self, record: dict, context: dict) -> None:
         """Upsert the record."""
         try:
-            # Check if the record was preprocessed successfully
-            if record is None:
-                self.logger.warning(f"Skipping {self.name} record as it could not be preprocessed")
-                return None, False, {"error": "Record could not be preprocessed"}
-                
             if record.get("parent_id"):
                 endpoint = (
                     self.endpoint.format(id=record["parent_id"])
@@ -482,6 +510,20 @@ class ProductSink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process a single record with proper error handling."""
+        try:
+            # Preprocess the record
+            preprocessed_record = self.preprocess_record(record, context)
+            
+            # Process the preprocessed record
+            return self.upsert_record(preprocessed_record, context)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            self.logger.error(f"Record data: {record}")
+            return None, False, {"error": str(e)}
+
     def process_variation(self, record: dict, prod_response) -> None:
         """Process the record."""
         try:
@@ -576,6 +618,20 @@ class OrderNotesSink(WoocommerceSink):
             self.logger.error(f"Record data: {record}")
             # Re-raise the exception to be caught by the calling method
             raise
+    
+    def process_record(self, record: dict, context: dict) -> None:
+        """Process a single record with proper error handling."""
+        try:
+            # Preprocess the record
+            preprocessed_record = self.preprocess_record(record, context)
+            
+            # Process the preprocessed record
+            return self.upsert_record(preprocessed_record, context)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            self.logger.error(f"Record data: {record}")
+            return None, False, {"error": str(e)}
     
     def upsert_record(self, record: dict, context: dict) -> None:
         """Process the record."""
