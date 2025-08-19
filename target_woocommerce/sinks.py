@@ -117,11 +117,18 @@ class SalesOrdersSink(WoocommerceSink):
             # Preprocess the record
             preprocessed_record = self.preprocess_record(record, context)
             
+            # If preprocessing failed (returned None), skip this record
+            if preprocessed_record is None:
+                error_msg = f"Skipping {self.name} record as preprocessing failed"
+                self.logger.error(error_msg)  # Use ERROR level for better visibility
+                return None, False, {"error": "Record preprocessing failed"}
+            
             # Process the preprocessed record
             return self.upsert_record(preprocessed_record, context)
             
         except Exception as e:
-            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            error_msg = f"Failed to process {self.name} record: {str(e)}"
+            self.logger.error(error_msg)  # Use ERROR level for better visibility
             self.logger.error(f"Record data: {record}")
             return None, False, {"error": str(e)}
 
@@ -196,30 +203,41 @@ class UpdateInventorySink(WoocommerceSink):
             product_id = record.get("id")
             product_sku = record.get("sku")
             product_name = record.get("name")
-            # check product and variant id first
+            
+            # Two-way approach: Use ID directly when available, fall back to SKU lookup
             if product_id:
+                # If we have an ID, try to use it directly first
+                self.logger.info(f"Using provided ID {product_id} directly for inventory update")
+                
+                # Check if it's a main product
                 product = next((p for p in self.products if str(p["id"]) == str(product_id)), None)
-            if product_id and not product:
-                self.logger.info(f"Product {product_id} not found in main products, checking variants...")
-                product = next(
-                    (p for p in self.product_variants if str(p["id"]) == str(product_id)), None
-                )
-            # check main product sku
-            if product_sku and not product:
-                self.logger.info(f"Attempting to match product with sku {product_sku}")
+                
+                # If not found in main products, check variants
+                if not product:
+                    self.logger.info(f"Product {product_id} not found in main products, checking variants...")
+                    product = next(
+                        (p for p in self.product_variants if str(p["id"]) == str(product_id)), None
+                    )
+                
+                if product:
+                    self.logger.info(f"Found product with ID {product_id}: {product.get('name', 'Unknown')}")
+                else:
+                    self.logger.warning(f"Product with ID {product_id} not found in reference data")
+            
+            # Fall back to SKU lookup only if we don't have an ID or ID lookup failed
+            if not product and product_sku:
+                self.logger.info(f"ID not available or not found, attempting SKU lookup for {product_sku}")
+                
+                # Check main product sku
                 product_list = [p for p in self.products if p.get("sku")==product_sku]
                 if len(product_list) > 1:
                     self.logger.info(f"More than one product was found with sku {product_sku}, filtering product by name...")
                     product = next((p for p in product_list if p.get("name") == product_name), None)
                 elif len(product_list) == 1:
                     product = product_list[0]
-            if product_name and not product:
-                self.logger.info(f"Attempting to match product with name {product_name}")
-                product = next((p for p in self.products if p.get("name") == product_name), None)
-
-            if not product:
-                # If it didn't work with main products, check the variants
-                if product_sku:
+                
+                # If not found in main products, check variants
+                if not product:
                     self.logger.info(f"Attempting to match product with sku {product_sku} in variants...")
                     product_list = [p for p in self.product_variants if p.get("sku")==product_sku]
                     if len(product_list) > 1:
@@ -227,13 +245,19 @@ class UpdateInventorySink(WoocommerceSink):
                         product = next((p for p in product_list if p.get("name") == product_name), None)
                     elif len(product_list) == 1:
                         product = product_list[0]
-                elif product_name:
+            
+            # Last resort: try name matching
+            if not product and product_name:
+                self.logger.info(f"Attempting to match product with name {product_name}")
+                product = next((p for p in self.products if p.get("name") == product_name), None)
+                
+                if not product:
                     self.logger.info(f"Attempting to match product with name {product_name} in variants...")
                     product = next(
                         (p for p in self.product_variants if p.get("name") == product_name), None
                     )
-
-                if not product and product_name:
+                
+                if not product:
                     self.logger.info(f"Attempting to match product with sanitized name in variants...")
                     # Some items may vary on naming and special characters
                     product = next(
@@ -272,12 +296,14 @@ class UpdateInventorySink(WoocommerceSink):
                 )
                 # remove sku from payload to avoid duplicate sku issues
                 _product.pop("sku", None)
+                
+                # Return the preprocessed product data directly (don't validate against UpdateInventory schema)
+                return self.clean_payload(_product)
             else:
                 self.logger.error(f"Could not find product with id, sku or name. Skipping product: {record}")
                 # Instead of raising an exception, return None to indicate this record should be skipped
                 return None
 
-            return self.validate_output(_product)
         except Exception as e:
             self.logger.error(f"Failed to preprocess {self.name} record: {str(e)}")
             self.logger.error(f"Record data: {record}")
@@ -292,14 +318,16 @@ class UpdateInventorySink(WoocommerceSink):
             
             # If preprocessing failed (returned None), skip this record
             if preprocessed_record is None:
-                self.logger.warning(f"Skipping {self.name} record as preprocessing failed")
+                error_msg = f"Skipping {self.name} record as preprocessing failed"
+                self.logger.error(error_msg)  # Use ERROR level for better visibility
                 return None, False, {"error": "Record preprocessing failed"}
             
             # Process the preprocessed record
             return self.upsert_record(preprocessed_record, context)
             
         except Exception as e:
-            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
+            error_msg = f"Failed to process {self.name} record: {str(e)}"
+            self.logger.error(error_msg)  # Use ERROR level for better visibility
             self.logger.error(f"Record data: {record}")
             return None, False, {"error": str(e)}
 
