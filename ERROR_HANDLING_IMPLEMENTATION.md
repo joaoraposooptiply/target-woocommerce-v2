@@ -44,9 +44,9 @@ This document summarizes the error handling improvements implemented in the WooC
 
 **Fix**: Improved error logging to use ERROR level consistently and ensure errors are properly propagated to the job output.
 
-**Additional Fix**: Added comprehensive error reporting system:
+**Additional Fix**: Added comprehensive error reporting system using Hotglue SDK's logging:
 - Added `report_error_to_job` method to base class
-- Multiple error reporting channels (ERROR, CRITICAL, stderr)
+- Uses Hotglue SDK's `self.logger` for consistent logging
 - Consistent error format across all sinks
 - Immediate visibility in job output/UI
 
@@ -161,13 +161,14 @@ This document summarizes the error handling improvements implemented in the WooC
 #### report_success method (NEW)
 - Added method to report successful record processing
 - Tracks successful records in export statistics
+- Uses Hotglue SDK's `self.logger.info()` for consistent logging
 - Logs success messages with record ID and operation type
 - Provides immediate visibility of successful operations
 
 #### report_failure method (NEW)
 - Added method to report failed record processing
 - Tracks failed records and errors in export statistics
-- Uses report_error_to_job for comprehensive error reporting
+- Uses Hotglue SDK's `self.logger.error()` for consistent logging
 - Maintains error history for summary reporting
 
 #### report_export_summary method (NEW)
@@ -175,7 +176,22 @@ This document summarizes the error handling improvements implemented in the WooC
 - Shows total, successful, and failed record counts
 - Calculates success rate percentage
 - Lists top errors encountered during processing
-- Provides comprehensive overview of export results
+- Uses Hotglue SDK's `self.logger.info()` for consistent logging
+
+#### _init_export_stats method (NEW)
+- Centralized method to initialize export statistics
+- Eliminates duplication across all sink classes
+- Ensures consistent statistics structure
+
+#### _handle_operation_error method (NEW)
+- Unified error handling helper method
+- Reduces code duplication in exception handling
+- Provides consistent error reporting and return values
+
+#### _log_operation_success method (NEW)
+- Consistent success logging helper method
+- Reduces duplication in success reporting
+- Ensures uniform success message format
 
 #### request_api method
 - Added comprehensive try-catch blocks
@@ -240,7 +256,7 @@ This document summarizes the error handling improvements implemented in the WooC
 - **ID-first**: When ID is provided, use it directly without reference data lookup
 - **SKU fallback**: When ID is not available, fall back to SKU lookup in reference data
 - **Performance improvement**: Reduces API calls and improves processing speed
-- **Backward compatibility**: Maintains existing behavior for SKU-only records
+- **Backward compatibility**: Maintains existing behavior for SKU-based records
 
 ### 7. Double Processing Prevention (NEW)
 - **Preprocessed flag**: Added `_preprocessed` flag to returned data
@@ -249,8 +265,8 @@ This document summarizes the error handling improvements implemented in the WooC
 - **Clean data return**: Return clean product data without validation errors
 
 ### 8. Comprehensive Error Reporting (NEW)
-- **Multiple channels**: ERROR, CRITICAL, and stderr output
-- **Job visibility**: Errors appear in job output/UI
+- **Hotglue SDK integration**: Uses `self.logger` for consistent logging
+- **Job visibility**: Errors appear in job output/UI through Hotglue SDK
 - **Consistent format**: Standardized error messages across all sinks
 - **Record data**: Error messages include relevant record data for debugging
 - **Immediate visibility**: Errors are immediately visible in logs and output
@@ -334,6 +350,9 @@ All four supported streams now have comprehensive error handling with the new `p
 12. **Success Logging**: Clear visibility of successful operations
 13. **Fixed Two-Way Approach**: Actually avoids reference data lookup when ID is provided
 14. **Export Summary**: Detailed summary reports at end of processing
+15. **DRY Code**: Reduced duplication and improved maintainability
+16. **Centralized Error Handling**: Consistent error handling across all operations
+17. **Unified Success Logging**: Consistent success reporting format
 
 ## Backward Compatibility
 
@@ -352,3 +371,13 @@ Potential enhancements for future versions:
 3. Configurable error handling policies
 4. Metrics collection for success/failure rates
 5. Additional performance optimizations for other sink types
+
+### 6. DRY Refactoring (NEW)
+**Specific Issue**: Code duplication across sink classes and methods.
+
+**Fix**: Applied DRY (Don't Repeat Yourself) principle:
+- **Centralized export statistics initialization**: Single `_init_export_stats()` method in base class
+- **Unified error handling**: `_handle_operation_error()` helper method for consistent error handling
+- **Consistent success logging**: `_log_operation_success()` helper method for success operations
+- **Removed duplicate methods**: Eliminated duplicate `__init__` and `process_record` methods
+- **Reduced code duplication**: Consolidated common patterns across all sink classes

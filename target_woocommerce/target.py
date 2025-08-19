@@ -55,13 +55,9 @@ class TargetWoocommerce(TargetHotglue):
 
     def report_export_summaries(self):
         """Report export summaries for all active sinks."""
-        print("\n" + "="*60)
-        print("EXPORT SUMMARY REPORT")
-        print("="*60)
-        
-        total_records = 0
-        total_successful = 0
-        total_failed = 0
+        self.logger.info("\n" + "="*60)
+        self.logger.info("EXPORT SUMMARY REPORT")
+        self.logger.info("="*60)
         
         for sink_class in SINK_TYPES:
             # Find active sinks of this type
@@ -69,21 +65,8 @@ class TargetWoocommerce(TargetHotglue):
                 if isinstance(sink, sink_class):
                     if hasattr(sink, 'export_stats') and sink.export_stats['total_records'] > 0:
                         sink.report_export_summary()
-                        total_records += sink.export_stats['total_records']
-                        total_successful += sink.export_stats['successful_records']
-                        total_failed += sink.export_stats['failed_records']
         
-        # Overall summary
-        overall_success_rate = (total_successful / total_records * 100) if total_records > 0 else 0
-        overall_summary = f"""
-=== OVERALL EXPORT SUMMARY ===
-Total Records Processed: {total_records}
-Total Successful: {total_successful}
-Total Failed: {total_failed}
-Overall Success Rate: {overall_success_rate:.1f}%
-"""
-        print(overall_summary)
-        print("="*60)
+        self.logger.info("="*60)
 
     def main(self):
         """Main method with export summary reporting."""

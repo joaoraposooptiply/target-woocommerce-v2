@@ -25,13 +25,28 @@ class WoocommerceSink(HotglueSink):
     ) -> None:
         self._state = dict(target._state)
         # Initialize export statistics
+        self._init_export_stats()
+        super().__init__(target, stream_name, schema, key_properties)
+
+    def _init_export_stats(self):
+        """Initialize export statistics to avoid duplication."""
         self.export_stats = {
             "total_records": 0,
             "successful_records": 0,
             "failed_records": 0,
             "errors": []
         }
-        super().__init__(target, stream_name, schema, key_properties)
+
+    def _handle_operation_error(self, operation: str, error: Exception, record: dict = None):
+        """Handle common error patterns to reduce duplication."""
+        error_msg = f"Failed to {operation}: {str(error)}"
+        self.report_failure(error_msg, record)
+        return None, False, {"error": str(error)}
+
+    def _log_operation_success(self, operation: str, record_id: str, operation_type: str = "processed"):
+        """Log successful operations consistently."""
+        self.logger.info(f"{self.name} {record_id} {operation_type}.")
+        self.report_success(str(record_id), operation_type)
 
     summary_init = False
     available_names = []
@@ -160,8 +175,6 @@ class WoocommerceSink(HotglueSink):
         """Report successful record processing."""
         self.export_stats["successful_records"] += 1
         self.logger.info(f"SUCCESS: {self.name} record {record_id} {operation} successfully")
-        import sys
-        print(f"SUCCESS: {self.name} record {record_id} {operation} successfully", file=sys.stderr)
 
     def report_failure(self, error_message: str, record_data: dict = None):
         """Report failed record processing."""
@@ -170,7 +183,10 @@ class WoocommerceSink(HotglueSink):
             "message": error_message,
             "record": record_data
         })
-        self.report_error_to_job(error_message, record_data)
+        # Use the Hotglue SDK's logger directly
+        self.logger.error(f"FAILURE: {error_message}")
+        if record_data:
+            self.logger.error(f"Record data: {record_data}")
 
     def report_export_summary(self):
         """Report export summary with statistics."""
@@ -195,24 +211,13 @@ Success Rate: {success_rate:.1f}%
                 summary += f"\n  ... and {len(self.export_stats['errors']) - 5} more errors"
         
         self.logger.info(summary)
-        import sys
-        print(summary, file=sys.stderr)
 
     def report_error_to_job(self, error_message: str, record_data: dict = None):
         """Report error to job output for better visibility."""
-        # Log error with high visibility
-        self.logger.error(f"JOB ERROR: {error_message}")
+        # Use the Hotglue SDK's logger directly
+        self.logger.error(f"ERROR: {error_message}")
         if record_data:
-            self.logger.error(f"JOB ERROR - Record data: {record_data}")
-        
-        # Also log as critical to ensure it appears in job output
-        self.logger.critical(f"CRITICAL ERROR: {error_message}")
-        
-        # Print to stderr for immediate visibility
-        import sys
-        print(f"ERROR: {error_message}", file=sys.stderr)
-        if record_data:
-            print(f"ERROR - Record data: {record_data}", file=sys.stderr)
+            self.logger.error(f"Record data: {record_data}")
 
     def request_api(self, method, endpoint=None, params=None, request_data=None):
         """Make API request with error handling."""

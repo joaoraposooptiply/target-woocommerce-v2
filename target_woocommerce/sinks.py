@@ -128,12 +128,12 @@ class SalesOrdersSink(WoocommerceSink):
             print(f"ERROR - Record data: {record_data}", file=sys.stderr)
 
     def process_record(self, record: dict, context: dict) -> None:
-        """Process a single record with proper error handling."""
+        """Override Hotglue SDK's process_record to ensure preprocess_record is called first."""
         # Track total records
         self.export_stats["total_records"] += 1
         
         try:
-            # Preprocess the record
+            # First, preprocess the record
             preprocessed_record = self.preprocess_record(record, context)
             
             # If preprocessing failed (returned None), skip this record
@@ -142,7 +142,7 @@ class SalesOrdersSink(WoocommerceSink):
                 self.report_failure(error_msg, record)
                 return None, False, {"error": "Record preprocessing failed"}
             
-            # Process the preprocessed record
+            # Then, upsert the preprocessed record
             result = self.upsert_record(preprocessed_record, context)
             
             # Report success if the operation was successful
@@ -153,9 +153,7 @@ class SalesOrdersSink(WoocommerceSink):
             return result
             
         except Exception as e:
-            error_msg = f"Failed to process {self.name} record: {str(e)}"
-            self.report_failure(error_msg, record)
-            return None, False, {"error": str(e)}
+            return self._handle_operation_error("process", e, record)
 
     def upsert_record(self, record: dict, context: dict) -> None:
         try:
@@ -166,18 +164,17 @@ class SalesOrdersSink(WoocommerceSink):
                 )
                 order_response = response.json()
                 id = order_response.get("id")
-                self.logger.info(f"{self.name} {id} updated.")
+                self._log_operation_success("upsert", str(id), "updated")
+                
                 return id, response.ok, {"updated": True}
             else:
                 response = self.request_api("POST", request_data=record)
                 id = response.json().get("id")
-                self.logger.info(f"{self.name} created with id: {id}")
+                self._log_operation_success("upsert", str(id), "created")
+                
                 return id, response.ok, dict()
         except Exception as e:
-            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
-            self.report_failure(error_msg, record)
-            # Return None to indicate failure but continue processing
-            return None, False, {"error": str(e)}
+            return self._handle_operation_error("upsert", e, record)
 
 
 
@@ -346,25 +343,7 @@ class UpdateInventorySink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
-    def process_record(self, record: dict, context: dict) -> None:
-        """Process a single record with proper error handling."""
-        try:
-            # Preprocess the record
-            preprocessed_record = self.preprocess_record(record, context)
-            
-            # If preprocessing failed (returned None), skip this record
-            if preprocessed_record is None:
-                error_msg = f"Skipping {self.name} record as preprocessing failed"
-                self.report_error_to_job(error_msg, record)
-                return None, False, {"error": "Record preprocessing failed"}
-            
-            # Process the preprocessed record
-            return self.upsert_record(preprocessed_record, context)
-            
-        except Exception as e:
-            error_msg = f"Failed to process {self.name} record: {str(e)}"
-            self.report_error_to_job(error_msg, record)
-            return None, False, {"error": str(e)}
+
 
     def upsert_record(self, record: dict, context: dict) -> None:
         """Upsert the record."""
@@ -381,13 +360,11 @@ class UpdateInventorySink(WoocommerceSink):
             response = self.request_api("PUT", endpoint, request_data=record)
             product_response = response.json()
             id = product_response.get("id")
-            self.logger.info(f"{self.name} updated for id: {id}, new stock: {product_response.get('stock_quantity')}.")
+            self._log_operation_success("upsert", str(id), "updated")
+            
             return id, response.ok, {"updated": True}
         except Exception as e:
-            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
-            self.report_error_to_job(error_msg, record)
-            # Return None to indicate failure but continue processing
-            return None, False, {"error": str(e)}
+            return self._handle_operation_error("upsert", e, record)
 
 class ProductSink(WoocommerceSink):
     """Woocommerce order target sink class."""
@@ -573,20 +550,6 @@ class ProductSink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
-    def process_record(self, record: dict, context: dict) -> None:
-        """Process a single record with proper error handling."""
-        try:
-            # Preprocess the record
-            preprocessed_record = self.preprocess_record(record, context)
-            
-            # Process the preprocessed record
-            return self.upsert_record(preprocessed_record, context)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
-            return None, False, {"error": str(e)}
-
     def process_variation(self, record: dict, prod_response) -> None:
         """Process the record."""
         try:
@@ -632,6 +595,11 @@ class ProductSink(WoocommerceSink):
                 product_response = response.json()
                 id = product_response.get("id")
                 self.logger.info(f"{self.name} {id} updated.")
+                
+                # Report success
+                if id:
+                    self.report_success(str(id), "updated")
+                
                 if record["type"] == "variable":
                     self.process_variation(record, product_response)
                 return id, response.ok, {"updated": True}
@@ -640,14 +608,16 @@ class ProductSink(WoocommerceSink):
                 product_response = response.json()
                 id = product_response.get("id")
                 self.logger.info(f"{self.name} created with id: {id}")
+                
+                # Report success
+                if id:
+                    self.report_success(str(id), "created")
+                
                 if record["type"] == "variable":
                     self.process_variation(record, product_response)
                 return id, response.ok, dict()
         except Exception as e:
-            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
-            self.report_failure(error_msg, record)
-            # Return None to indicate failure but continue processing
-            return None, False, {"error": str(e)}
+            return self._handle_operation_error("upsert", e, record)
 
         
 class OrderNotesSink(WoocommerceSink):
@@ -682,20 +652,6 @@ class OrderNotesSink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
     
-    def process_record(self, record: dict, context: dict) -> None:
-        """Process a single record with proper error handling."""
-        try:
-            # Preprocess the record
-            preprocessed_record = self.preprocess_record(record, context)
-            
-            # Process the preprocessed record
-            return self.upsert_record(preprocessed_record, context)
-            
-        except Exception as e:
-            self.logger.error(f"Failed to process {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
-            return None, False, {"error": str(e)}
-    
     def upsert_record(self, record: dict, context: dict) -> None:
         """Process the record."""
         try:
@@ -705,12 +661,14 @@ class OrderNotesSink(WoocommerceSink):
                 product_response = response.json()
                 id = product_response.get("id")
                 self.logger.info(f"{self.name} {id} added.")
+                
+                # Report success
+                if id:
+                    self.report_success(str(id), "created")
+                
                 return id, response.ok, dict()
             else:
                 self.logger.warn(f"{self.name} had no order_id skipped note {record.get('note')}")
                 return None, False, {"error": "No order_id provided"}
         except Exception as e:
-            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
-            self.report_error_to_job(error_msg, record)
-            # Return None to indicate failure but continue processing
-            return None, False, {"error": str(e)}
+            return self._handle_operation_error("upsert", e, record)
