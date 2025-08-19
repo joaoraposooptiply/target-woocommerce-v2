@@ -22,6 +22,11 @@ This document summarizes the error handling improvements implemented in the WooC
 
 **Fix**: Modified `preprocess_record` to return cleaned product data directly instead of validating against the `UpdateInventory` schema, since the preprocessed data represents the final product state.
 
+**Additional Fix**: Added prevention of double processing by:
+- Adding `_preprocessed` flag to returned data
+- Checking for already preprocessed data at the beginning of `preprocess_record`
+- Ensuring `validate_input` is only called on input records, not preprocessed data
+
 ### 3. Performance Optimization
 **Specific Issue**: The `UpdateInventorySink` was always performing reference data lookups, even when the ID was provided in the singer data.
 
@@ -61,6 +66,9 @@ This document summarizes the error handling improvements implemented in the WooC
 - Changed `raise Exception(f"Could not find product...")` to `self.logger.error()` and return `None`
 - **NEW**: Implemented two-way approach (ID-first, SKU fallback)
 - **NEW**: Return cleaned product data directly instead of validating against UpdateInventory schema
+- **NEW**: Added `_preprocessed` flag to prevent double processing
+- **NEW**: Added check for already preprocessed data at method start
+- **NEW**: Ensure `validate_input` is only called on input records
 - Added detailed error logging
 
 #### process_record method (NEW)
@@ -171,6 +179,12 @@ This document summarizes the error handling improvements implemented in the WooC
 - **Performance improvement**: Reduces API calls and improves processing speed
 - **Backward compatibility**: Maintains existing behavior for SKU-only records
 
+### 7. Double Processing Prevention (NEW)
+- **Preprocessed flag**: Added `_preprocessed` flag to returned data
+- **Duplicate check**: Check for already preprocessed data at method start
+- **Validation isolation**: Ensure `validate_input` is only called on input records
+- **Clean data return**: Return clean product data without validation errors
+
 ## Performance Optimizations
 
 ### UpdateInventorySink Two-Way Approach
@@ -197,6 +211,7 @@ The error handling improvements were tested with various scenarios:
 **Test Scenario 2**: Validation error with UpdateInventory schema
 - **Before Fix**: Validation error stopped processing
 - **After Fix**: Proper handling of preprocessed product data
+- **Additional Fix**: Prevention of double processing with `_preprocessed` flag
 
 **Test Scenario 3**: Two-way approach for inventory updates
 - **ID provided**: Direct processing without reference data lookup

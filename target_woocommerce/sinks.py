@@ -195,14 +195,22 @@ class UpdateInventorySink(WoocommerceSink):
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         try:
-            if "product_name" in record.keys():
-                record["name"] = record["product_name"]
-            record = self.validate_input(record)
+            # Check if this record is already preprocessed
+            if record.get("_preprocessed"):
+                self.logger.info(f"Record already preprocessed, returning as-is")
+                return record
+            
+            # Validate the input record first (this validates against UpdateInventory schema)
+            validated_record = self.validate_input(record)
+            
+            # Handle product_name mapping
+            if "product_name" in validated_record.keys():
+                validated_record["name"] = validated_record["product_name"]
 
             product = None
-            product_id = record.get("id")
-            product_sku = record.get("sku")
-            product_name = record.get("name")
+            product_id = validated_record.get("id")
+            product_sku = validated_record.get("sku")
+            product_name = validated_record.get("name")
             
             # Two-way approach: Use ID directly when available, fall back to SKU lookup
             if product_id:
@@ -275,14 +283,14 @@ class UpdateInventorySink(WoocommerceSink):
                 _product = product.copy()
                 in_stock = True
                 current_stock = _product.get("stock_quantity") or 0
-                self.logger.info(f"product with sku '{_product.get('sku')}' and id {_product['id']} current stock: {current_stock}, executing operation '{record['operation']}' with quantity {record['quantity']}")
+                self.logger.info(f"product with sku '{_product.get('sku')}' and id {_product['id']} current stock: {current_stock}, executing operation '{validated_record['operation']}' with quantity {validated_record['quantity']}")
 
-                if record["operation"] == "subtract":
-                    current_stock = current_stock - int(record["quantity"])
-                if record["operation"] == "set":
-                    current_stock = int(record["quantity"])
+                if validated_record["operation"] == "subtract":
+                    current_stock = current_stock - int(validated_record["quantity"])
+                if validated_record["operation"] == "set":
+                    current_stock = int(validated_record["quantity"])
                 else:
-                    current_stock = current_stock + int(record["quantity"])
+                    current_stock = current_stock + int(validated_record["quantity"])
 
                 if current_stock <= 0:
                     in_stock = False
@@ -298,9 +306,15 @@ class UpdateInventorySink(WoocommerceSink):
                 _product.pop("sku", None)
                 
                 # Return the preprocessed product data directly (don't validate against UpdateInventory schema)
-                return self.clean_payload(_product)
+                # Ensure the returned data is clean and won't cause validation issues
+                cleaned_product = self.clean_payload(_product)
+                
+                # Add a flag to indicate this is preprocessed data to prevent double processing
+                cleaned_product["_preprocessed"] = True
+                
+                return cleaned_product
             else:
-                self.logger.error(f"Could not find product with id, sku or name. Skipping product: {record}")
+                self.logger.error(f"Could not find product with id, sku or name. Skipping product: {validated_record}")
                 # Instead of raising an exception, return None to indicate this record should be skipped
                 return None
 
