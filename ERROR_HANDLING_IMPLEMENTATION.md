@@ -34,10 +34,31 @@ This document summarizes the error handling improvements implemented in the WooC
 - **ID-first**: When ID is provided, use it directly without reference data lookup
 - **SKU fallback**: When ID is not available, fall back to SKU lookup in reference data
 
+**Additional Fix**: Fixed the two-way approach to actually avoid reference data lookups:
+- Create minimal product object when ID is provided
+- Skip `self.products` and `self.product_variants` access when ID is available
+- Only fall back to reference data lookup when no ID is provided
+
 ### 4. Error Visibility Issue
 **Specific Issue**: Error messages were not properly visible in the job output.
 
 **Fix**: Improved error logging to use ERROR level consistently and ensure errors are properly propagated to the job output.
+
+**Additional Fix**: Added comprehensive error reporting system:
+- Added `report_error_to_job` method to base class
+- Multiple error reporting channels (ERROR, CRITICAL, stderr)
+- Consistent error format across all sinks
+- Immediate visibility in job output/UI
+
+### 5. Export Details and Statistics
+**Specific Issue**: No visibility into export progress, success rates, or detailed error reporting.
+
+**Fix**: Added comprehensive export tracking and reporting:
+- **Export Statistics**: Track total, successful, and failed records
+- **Success/Failure Logging**: Clear success and failure messages
+- **Export Summary**: Detailed summary report at the end of processing
+- **Error Tracking**: Collect and report all errors with details
+- **Overall Summary**: Combined statistics across all sinks
 
 ## Changes Made
 
@@ -69,6 +90,8 @@ This document summarizes the error handling improvements implemented in the WooC
 - **NEW**: Added `_preprocessed` flag to prevent double processing
 - **NEW**: Added check for already preprocessed data at method start
 - **NEW**: Ensure `validate_input` is only called on input records
+- **FIXED**: Two-way approach now actually avoids reference data lookup when ID is provided
+- **FIXED**: Create minimal product object for direct API calls when ID is available
 - Added detailed error logging
 
 #### process_record method (NEW)
@@ -129,10 +152,36 @@ This document summarizes the error handling improvements implemented in the WooC
 
 ### 5. WoocommerceSink Base Class (`target_woocommerce/client.py`)
 
+#### report_error_to_job method (NEW)
+- Added method to report errors to job output for better visibility
+- Multiple reporting channels: ERROR, CRITICAL, and stderr
+- Consistent error format across all sinks
+- Immediate visibility in job output/UI
+
+#### report_success method (NEW)
+- Added method to report successful record processing
+- Tracks successful records in export statistics
+- Logs success messages with record ID and operation type
+- Provides immediate visibility of successful operations
+
+#### report_failure method (NEW)
+- Added method to report failed record processing
+- Tracks failed records and errors in export statistics
+- Uses report_error_to_job for comprehensive error reporting
+- Maintains error history for summary reporting
+
+#### report_export_summary method (NEW)
+- Added method to generate detailed export summary
+- Shows total, successful, and failed record counts
+- Calculates success rate percentage
+- Lists top errors encountered during processing
+- Provides comprehensive overview of export results
+
 #### request_api method
 - Added comprehensive try-catch blocks
 - Added detailed HTTP error logging
 - Added response status and content logging on failures
+- **NEW**: Uses `report_error_to_job` for better error visibility
 
 #### get_reference_data method
 - Added try-catch block around the entire method
@@ -146,6 +195,19 @@ This document summarizes the error handling improvements implemented in the WooC
 - Returns original response on failure
 - Added detailed error logging
 
+### 6. TargetWoocommerce Class (`target_woocommerce/target.py`)
+
+#### report_export_summaries method (NEW)
+- Added method to report export summaries for all active sinks
+- Combines statistics across all sink types
+- Provides overall export summary with success rates
+- Ensures export details are always reported
+
+#### main method (OVERRIDDEN)
+- Override main method to ensure export summaries are reported
+- Uses try-finally to guarantee summary reporting even on errors
+- Provides comprehensive export visibility
+
 ## Error Handling Features
 
 ### 1. Graceful Degradation
@@ -158,6 +220,7 @@ This document summarizes the error handling improvements implemented in the WooC
 - HTTP errors include status codes and response content
 - Different log levels (error, warning, info) for different types of issues
 - **NEW**: Improved error visibility in job output
+- **NEW**: Comprehensive error reporting system with multiple channels
 
 ### 3. Return Value Consistency
 - Successful records: `(id, True, {"updated": True})` or `(id, True, {})`
@@ -185,6 +248,21 @@ This document summarizes the error handling improvements implemented in the WooC
 - **Validation isolation**: Ensure `validate_input` is only called on input records
 - **Clean data return**: Return clean product data without validation errors
 
+### 8. Comprehensive Error Reporting (NEW)
+- **Multiple channels**: ERROR, CRITICAL, and stderr output
+- **Job visibility**: Errors appear in job output/UI
+- **Consistent format**: Standardized error messages across all sinks
+- **Record data**: Error messages include relevant record data for debugging
+- **Immediate visibility**: Errors are immediately visible in logs and output
+
+### 9. Export Details and Statistics (NEW)
+- **Export tracking**: Track total, successful, and failed records
+- **Success logging**: Clear success messages with record IDs
+- **Failure tracking**: Comprehensive error collection and reporting
+- **Export summary**: Detailed summary at end of processing
+- **Overall statistics**: Combined statistics across all sinks
+- **Progress visibility**: Real-time visibility into export progress
+
 ## Performance Optimizations
 
 ### UpdateInventorySink Two-Way Approach
@@ -193,6 +271,12 @@ This document summarizes the error handling improvements implemented in the WooC
 - Uses ID directly when provided (no lookup needed)
 - Falls back to SKU lookup only when ID is not available
 - Reduces API calls and improves performance for bulk updates
+
+**Fixed Implementation**:
+- **ID-first**: Create minimal product object when ID is provided
+- **No reference data access**: Skip `self.products` and `self.product_variants` when ID available
+- **Direct API calls**: Use ID directly for API operations
+- **SKU fallback**: Only access reference data when no ID is provided
 
 **Benefits**:
 - Faster processing when ID is provided
@@ -217,6 +301,13 @@ The error handling improvements were tested with various scenarios:
 - **ID provided**: Direct processing without reference data lookup
 - **SKU only**: Fallback to reference data lookup
 - **Performance**: Improved speed and reduced API calls
+- **Fixed Implementation**: Actually avoids reference data lookup when ID is provided
+
+**Test Scenario 4**: Export details and statistics
+- **Success tracking**: Records successful operations with IDs
+- **Failure tracking**: Collects and reports all errors
+- **Export summary**: Detailed summary at end of processing
+- **Overall statistics**: Combined statistics across all sinks
 
 ## Supported Streams
 
@@ -237,6 +328,12 @@ All four supported streams now have comprehensive error handling with the new `p
 6. **Consistent Behavior**: All sink types handle errors in the same way
 7. **Performance Improvement**: Two-way approach reduces API calls and improves speed
 8. **Better Error Visibility**: Errors are properly logged and visible in job output
+9. **Comprehensive Error Reporting**: Multiple channels ensure errors are never missed
+10. **Job Output Integration**: Errors appear in job UI for immediate visibility
+11. **Export Details**: Comprehensive export statistics and progress tracking
+12. **Success Logging**: Clear visibility of successful operations
+13. **Fixed Two-Way Approach**: Actually avoids reference data lookup when ID is provided
+14. **Export Summary**: Detailed summary reports at end of processing
 
 ## Backward Compatibility
 

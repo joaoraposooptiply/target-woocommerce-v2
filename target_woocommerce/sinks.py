@@ -111,8 +111,27 @@ class SalesOrdersSink(WoocommerceSink):
             # Re-raise the exception to be caught by the calling method
             raise
 
+    def report_error_to_job(self, error_message: str, record_data: dict = None):
+        """Report error to job output for better visibility."""
+        # Log error with high visibility
+        self.logger.error(f"JOB ERROR: {error_message}")
+        if record_data:
+            self.logger.error(f"JOB ERROR - Record data: {record_data}")
+        
+        # Also log as critical to ensure it appears in job output
+        self.logger.critical(f"CRITICAL ERROR: {error_message}")
+        
+        # Print to stderr for immediate visibility
+        import sys
+        print(f"ERROR: {error_message}", file=sys.stderr)
+        if record_data:
+            print(f"ERROR - Record data: {record_data}", file=sys.stderr)
+
     def process_record(self, record: dict, context: dict) -> None:
         """Process a single record with proper error handling."""
+        # Track total records
+        self.export_stats["total_records"] += 1
+        
         try:
             # Preprocess the record
             preprocessed_record = self.preprocess_record(record, context)
@@ -120,16 +139,22 @@ class SalesOrdersSink(WoocommerceSink):
             # If preprocessing failed (returned None), skip this record
             if preprocessed_record is None:
                 error_msg = f"Skipping {self.name} record as preprocessing failed"
-                self.logger.error(error_msg)  # Use ERROR level for better visibility
+                self.report_failure(error_msg, record)
                 return None, False, {"error": "Record preprocessing failed"}
             
             # Process the preprocessed record
-            return self.upsert_record(preprocessed_record, context)
+            result = self.upsert_record(preprocessed_record, context)
+            
+            # Report success if the operation was successful
+            if result and result[1]:  # result[1] is the success flag
+                record_id = result[0] if result[0] else "unknown"
+                self.report_success(record_id, "updated" if result[2].get("updated") else "created")
+            
+            return result
             
         except Exception as e:
             error_msg = f"Failed to process {self.name} record: {str(e)}"
-            self.logger.error(error_msg)  # Use ERROR level for better visibility
-            self.logger.error(f"Record data: {record}")
+            self.report_failure(error_msg, record)
             return None, False, {"error": str(e)}
 
     def upsert_record(self, record: dict, context: dict) -> None:
@@ -149,8 +174,8 @@ class SalesOrdersSink(WoocommerceSink):
                 self.logger.info(f"{self.name} created with id: {id}")
                 return id, response.ok, dict()
         except Exception as e:
-            self.logger.error(f"Failed to upsert {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
+            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
+            self.report_failure(error_msg, record)
             # Return None to indicate failure but continue processing
             return None, False, {"error": str(e)}
 
@@ -217,24 +242,20 @@ class UpdateInventorySink(WoocommerceSink):
                 # If we have an ID, try to use it directly first
                 self.logger.info(f"Using provided ID {product_id} directly for inventory update")
                 
-                # Check if it's a main product
-                product = next((p for p in self.products if str(p["id"]) == str(product_id)), None)
+                # Create a minimal product object with the ID for direct API call
+                # This avoids reference data lookup when we have the ID
+                product = {
+                    "id": int(product_id),
+                    "name": product_name or f"Product {product_id}",
+                    "sku": product_sku,
+                    "stock_quantity": 0,  # Will be fetched from API
+                    "type": "simple"  # Default type
+                }
+                self.logger.info(f"Using ID {product_id} directly - skipping reference data lookup")
                 
-                # If not found in main products, check variants
-                if not product:
-                    self.logger.info(f"Product {product_id} not found in main products, checking variants...")
-                    product = next(
-                        (p for p in self.product_variants if str(p["id"]) == str(product_id)), None
-                    )
-                
-                if product:
-                    self.logger.info(f"Found product with ID {product_id}: {product.get('name', 'Unknown')}")
-                else:
-                    self.logger.warning(f"Product with ID {product_id} not found in reference data")
-            
-            # Fall back to SKU lookup only if we don't have an ID or ID lookup failed
-            if not product and product_sku:
-                self.logger.info(f"ID not available or not found, attempting SKU lookup for {product_sku}")
+            # Fall back to SKU lookup only if we don't have an ID
+            elif product_sku:
+                self.logger.info(f"No ID provided, attempting SKU lookup for {product_sku}")
                 
                 # Check main product sku
                 product_list = [p for p in self.products if p.get("sku")==product_sku]
@@ -255,8 +276,8 @@ class UpdateInventorySink(WoocommerceSink):
                         product = product_list[0]
             
             # Last resort: try name matching
-            if not product and product_name:
-                self.logger.info(f"Attempting to match product with name {product_name}")
+            elif product_name:
+                self.logger.info(f"No ID or SKU provided, attempting name lookup for {product_name}")
                 product = next((p for p in self.products if p.get("name") == product_name), None)
                 
                 if not product:
@@ -314,13 +335,14 @@ class UpdateInventorySink(WoocommerceSink):
                 
                 return cleaned_product
             else:
-                self.logger.error(f"Could not find product with id, sku or name. Skipping product: {validated_record}")
+                error_msg = f"Could not find product with id, sku or name. Skipping product: {validated_record}"
+                self.report_failure(error_msg, validated_record)
                 # Instead of raising an exception, return None to indicate this record should be skipped
                 return None
 
         except Exception as e:
-            self.logger.error(f"Failed to preprocess {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
+            error_msg = f"Failed to preprocess {self.name} record: {str(e)}"
+            self.report_failure(error_msg, record)
             # Re-raise the exception to be caught by the calling method
             raise
 
@@ -333,7 +355,7 @@ class UpdateInventorySink(WoocommerceSink):
             # If preprocessing failed (returned None), skip this record
             if preprocessed_record is None:
                 error_msg = f"Skipping {self.name} record as preprocessing failed"
-                self.logger.error(error_msg)  # Use ERROR level for better visibility
+                self.report_error_to_job(error_msg, record)
                 return None, False, {"error": "Record preprocessing failed"}
             
             # Process the preprocessed record
@@ -341,8 +363,7 @@ class UpdateInventorySink(WoocommerceSink):
             
         except Exception as e:
             error_msg = f"Failed to process {self.name} record: {str(e)}"
-            self.logger.error(error_msg)  # Use ERROR level for better visibility
-            self.logger.error(f"Record data: {record}")
+            self.report_error_to_job(error_msg, record)
             return None, False, {"error": str(e)}
 
     def upsert_record(self, record: dict, context: dict) -> None:
@@ -363,8 +384,8 @@ class UpdateInventorySink(WoocommerceSink):
             self.logger.info(f"{self.name} updated for id: {id}, new stock: {product_response.get('stock_quantity')}.")
             return id, response.ok, {"updated": True}
         except Exception as e:
-            self.logger.error(f"Failed to upsert {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
+            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
+            self.report_error_to_job(error_msg, record)
             # Return None to indicate failure but continue processing
             return None, False, {"error": str(e)}
 
@@ -623,8 +644,8 @@ class ProductSink(WoocommerceSink):
                     self.process_variation(record, product_response)
                 return id, response.ok, dict()
         except Exception as e:
-            self.logger.error(f"Failed to upsert {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
+            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
+            self.report_failure(error_msg, record)
             # Return None to indicate failure but continue processing
             return None, False, {"error": str(e)}
 
@@ -689,7 +710,7 @@ class OrderNotesSink(WoocommerceSink):
                 self.logger.warn(f"{self.name} had no order_id skipped note {record.get('note')}")
                 return None, False, {"error": "No order_id provided"}
         except Exception as e:
-            self.logger.error(f"Failed to upsert {self.name} record: {str(e)}")
-            self.logger.error(f"Record data: {record}")
+            error_msg = f"Failed to upsert {self.name} record: {str(e)}"
+            self.report_error_to_job(error_msg, record)
             # Return None to indicate failure but continue processing
             return None, False, {"error": str(e)}

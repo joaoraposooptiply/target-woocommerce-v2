@@ -24,6 +24,13 @@ class WoocommerceSink(HotglueSink):
         key_properties: Optional[List[str]],
     ) -> None:
         self._state = dict(target._state)
+        # Initialize export statistics
+        self.export_stats = {
+            "total_records": 0,
+            "successful_records": 0,
+            "failed_records": 0,
+            "errors": []
+        }
         super().__init__(target, stream_name, schema, key_properties)
 
     summary_init = False
@@ -149,6 +156,64 @@ class WoocommerceSink(HotglueSink):
             # Return empty list instead of raising exception
             return []
 
+    def report_success(self, record_id: str, operation: str = "processed"):
+        """Report successful record processing."""
+        self.export_stats["successful_records"] += 1
+        self.logger.info(f"SUCCESS: {self.name} record {record_id} {operation} successfully")
+        import sys
+        print(f"SUCCESS: {self.name} record {record_id} {operation} successfully", file=sys.stderr)
+
+    def report_failure(self, error_message: str, record_data: dict = None):
+        """Report failed record processing."""
+        self.export_stats["failed_records"] += 1
+        self.export_stats["errors"].append({
+            "message": error_message,
+            "record": record_data
+        })
+        self.report_error_to_job(error_message, record_data)
+
+    def report_export_summary(self):
+        """Report export summary with statistics."""
+        total = self.export_stats["total_records"]
+        successful = self.export_stats["successful_records"]
+        failed = self.export_stats["failed_records"]
+        success_rate = (successful / total * 100) if total > 0 else 0
+        
+        summary = f"""
+=== EXPORT SUMMARY FOR {self.name} ===
+Total Records: {total}
+Successful: {successful}
+Failed: {failed}
+Success Rate: {success_rate:.1f}%
+"""
+        
+        if failed > 0:
+            summary += f"\nErrors encountered: {len(self.export_stats['errors'])}"
+            for i, error in enumerate(self.export_stats['errors'][:5], 1):  # Show first 5 errors
+                summary += f"\n  {i}. {error['message']}"
+            if len(self.export_stats['errors']) > 5:
+                summary += f"\n  ... and {len(self.export_stats['errors']) - 5} more errors"
+        
+        self.logger.info(summary)
+        import sys
+        print(summary, file=sys.stderr)
+
+    def report_error_to_job(self, error_message: str, record_data: dict = None):
+        """Report error to job output for better visibility."""
+        # Log error with high visibility
+        self.logger.error(f"JOB ERROR: {error_message}")
+        if record_data:
+            self.logger.error(f"JOB ERROR - Record data: {record_data}")
+        
+        # Also log as critical to ensure it appears in job output
+        self.logger.critical(f"CRITICAL ERROR: {error_message}")
+        
+        # Print to stderr for immediate visibility
+        import sys
+        print(f"ERROR: {error_message}", file=sys.stderr)
+        if record_data:
+            print(f"ERROR - Record data: {record_data}", file=sys.stderr)
+
     def request_api(self, method, endpoint=None, params=None, request_data=None):
         """Make API request with error handling."""
         try:
@@ -169,14 +234,16 @@ class WoocommerceSink(HotglueSink):
             return response
             
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"API request failed: {method} {url}")
+            error_msg = f"API request failed: {method} {url}"
+            self.report_error_to_job(error_msg)
             self.logger.error(f"Error: {str(e)}")
             if hasattr(e, 'response') and e.response is not None:
                 self.logger.error(f"Response status: {e.response.status_code}")
                 self.logger.error(f"Response content: {e.response.text}")
             raise
         except Exception as e:
-            self.logger.error(f"Unexpected error in API request: {str(e)}")
+            error_msg = f"Unexpected error in API request: {str(e)}"
+            self.report_error_to_job(error_msg)
             raise
 
     @staticmethod
