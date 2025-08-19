@@ -239,19 +239,29 @@ class UpdateInventorySink(WoocommerceSink):
                 # If we have an ID, try to use it directly first
                 self.logger.info(f"Using provided ID {product_id} directly for inventory update")
                 
-                # Create a minimal product object with the ID for direct API call
-                # This avoids reference data lookup when we have the ID
-                product = {
-                    "id": int(product_id),
-                    "name": product_name or f"Product {product_id}",
-                    "sku": product_sku,
-                    "stock_quantity": 0,  # Will be fetched from API
-                    "type": "simple"  # Default type
-                }
-                self.logger.info(f"Using ID {product_id} directly - skipping reference data lookup")
+                # Fetch the actual product data from API to get current stock
+                try:
+                    endpoint = f"products/{product_id}"
+                    response = self.request_api("GET", endpoint)
+                    product_data = response.json()
+                    
+                    # Create product object with actual data from API
+                    product = {
+                        "id": int(product_id),
+                        "name": product_data.get("name", product_name or f"Product {product_id}"),
+                        "sku": product_data.get("sku", product_sku),
+                        "stock_quantity": product_data.get("stock_quantity", 0),
+                        "type": product_data.get("type", "simple")
+                    }
+                    self.logger.info(f"Fetched current stock for ID {product_id}: {product['stock_quantity']}")
+                    
+                except Exception as e:
+                    self.logger.warning(f"Failed to fetch product data for ID {product_id}, falling back to reference data lookup: {str(e)}")
+                    # Fall back to reference data lookup if API call fails
+                    product = None
                 
-            # Fall back to SKU lookup only if we don't have an ID
-            elif product_sku:
+            # Fall back to SKU lookup only if we don't have an ID or ID lookup failed
+            if not product and product_sku:
                 self.logger.info(f"No ID provided, attempting SKU lookup for {product_sku}")
                 
                 # Check main product sku
