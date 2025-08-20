@@ -381,6 +381,11 @@ class UpdateInventorySink(WoocommerceSink):
     def upsert_record(self, record: dict, context: dict) -> None:
         """Upsert the record."""
         try:
+            # Check if this is a skip marker
+            if record.get("_skip"):
+                error_msg = record.get("error", "Record skipped")
+                return None, False, {"error": error_msg, "skipped": True}
+            
             # Ensure we have the required 'id' field
             if "id" not in record:
                 raise KeyError("id")
