@@ -136,9 +136,12 @@ class SalesOrdersSink(WoocommerceSink):
             # First, preprocess the record
             preprocessed_record = self.preprocess_record(record, context)
             
-            # If preprocessing failed (returned None), skip this record
-            if preprocessed_record is None:
-                error_msg = f"Skipping {self.name} record as preprocessing failed"
+            # If preprocessing failed (returned None or skip marker), skip this record
+            if preprocessed_record is None or preprocessed_record.get("_skip"):
+                if preprocessed_record and preprocessed_record.get("_skip"):
+                    error_msg = preprocessed_record.get("error", f"Skipping {self.name} record as preprocessing failed")
+                else:
+                    error_msg = f"Skipping {self.name} record as preprocessing failed"
                 self.report_failure(error_msg, record)
                 return None, False, {"error": "Record preprocessing failed"}
             
@@ -355,8 +358,8 @@ class UpdateInventorySink(WoocommerceSink):
             else:
                 error_msg = f"Could not find product with id, sku or name. Skipping product: {validated_record}"
                 self.report_failure(error_msg, validated_record)
-                # Instead of raising an exception, return None to indicate this record should be skipped
-                return None
+                # Return a special marker to indicate this record should be skipped
+                return {"_skip": True, "error": error_msg}
 
         except Exception as e:
             error_msg = f"Failed to preprocess {self.name} record: {str(e)}"
