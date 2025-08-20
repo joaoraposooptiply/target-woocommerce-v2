@@ -136,6 +136,12 @@ class SalesOrdersSink(WoocommerceSink):
             # First, preprocess the record
             preprocessed_record = self.preprocess_record(record, context)
             
+            # If preprocessing returned None, the record should be skipped
+            if preprocessed_record is None:
+                # The error has already been reported in preprocess_record
+                # Return a proper error tuple that indicates the record was skipped
+                return None, False, {"error": "Product not found - record skipped", "skipped": True}
+            
             # Then, upsert the preprocessed record
             result = self.upsert_record(preprocessed_record, context)
             
@@ -146,11 +152,6 @@ class SalesOrdersSink(WoocommerceSink):
             
             return result
             
-        except ValueError as e:
-            # Handle product not found errors specifically
-            error_msg = str(e)
-            self.report_failure(error_msg, record)
-            return None, False, {"error": error_msg, "skipped": True}
         except Exception as e:
             return self._handle_operation_error("process", e, record)
 
@@ -363,8 +364,8 @@ class UpdateInventorySink(WoocommerceSink):
                 
                 error_msg = f"Product not found: Attempted lookup by {', '.join(attempted_lookups)} but no matching product exists in WooCommerce. Skipping record."
                 self.report_failure(error_msg, validated_record)
-                # Raise a specific exception that we can catch and handle properly
-                raise ValueError(error_msg)
+                # Return None to indicate this record should be skipped
+                return None
 
         except Exception as e:
             error_msg = f"Failed to preprocess {self.name} record: {str(e)}"
