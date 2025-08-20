@@ -117,6 +117,12 @@ class WoocommerceSink(HotglueSink):
             for resp in response:
                 try:
                     if not self.check_payload_for_fields(resp, fields):
+                        # Check if 'id' exists before using it
+                        if 'id' not in resp:
+                            self.logger.warning(f"Response missing 'id' field, skipping: {resp}")
+                            modified_response.append(resp)
+                            continue
+                        
                         modified_response.append(
                             self.request_api("GET", f"{fallback_url}{resp['id']}").json()
                         )
@@ -239,12 +245,27 @@ Success Rate: {success_rate:.1f}%
             return response
             
         except requests.exceptions.RequestException as e:
-            error_msg = f"API request failed: {method} {url}"
-            self.report_error_to_job(error_msg)
-            self.logger.error(f"Error: {str(e)}")
+            # Provide more specific error messages based on status code
             if hasattr(e, 'response') and e.response is not None:
-                self.logger.error(f"Response status: {e.response.status_code}")
+                status_code = e.response.status_code
+                if status_code == 404:
+                    error_msg = f"Resource not found (404): {method} {url} - The requested resource does not exist or has been deleted"
+                elif status_code == 403:
+                    error_msg = f"Access forbidden (403): {method} {url} - Check authentication credentials"
+                elif status_code == 401:
+                    error_msg = f"Unauthorized (401): {method} {url} - Invalid authentication credentials"
+                elif status_code == 429:
+                    error_msg = f"Rate limited (429): {method} {url} - Too many requests, please wait"
+                else:
+                    error_msg = f"API request failed ({status_code}): {method} {url}"
+                
+                self.report_error_to_job(error_msg)
+                self.logger.error(f"HTTP {status_code}: {error_msg}")
                 self.logger.error(f"Response content: {e.response.text}")
+            else:
+                error_msg = f"API request failed: {method} {url} - {str(e)}"
+                self.report_error_to_job(error_msg)
+                self.logger.error(f"Error: {str(e)}")
             raise
         except Exception as e:
             error_msg = f"Unexpected error in API request: {str(e)}"

@@ -356,7 +356,16 @@ class UpdateInventorySink(WoocommerceSink):
                 
                 return cleaned_product
             else:
-                error_msg = f"Could not find product with id, sku or name. Skipping product: {validated_record}"
+                # Build a detailed error message showing what was attempted
+                attempted_lookups = []
+                if validated_record.get("id"):
+                    attempted_lookups.append(f"ID '{validated_record['id']}'")
+                if validated_record.get("sku"):
+                    attempted_lookups.append(f"SKU '{validated_record['sku']}'")
+                if validated_record.get("name"):
+                    attempted_lookups.append(f"name '{validated_record['name']}'")
+                
+                error_msg = f"Product not found: Attempted lookup by {', '.join(attempted_lookups)} but no matching product exists in WooCommerce. Skipping record."
                 self.report_failure(error_msg, validated_record)
                 # Return a special marker to indicate this record should be skipped
                 return {"_skip": True, "error": error_msg}
