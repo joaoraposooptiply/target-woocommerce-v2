@@ -325,7 +325,7 @@ class UpdateInventorySink(WoocommerceSink):
                 _product = product.copy()
                 in_stock = True
                 current_stock = _product.get("stock_quantity") or 0
-                self.logger.info(f"product with sku '{_product.get('sku')}' and id {_product['id']} current stock: {current_stock}, executing operation '{validated_record['operation']}' with quantity {validated_record['quantity']}")
+                self.logger.info(f"product with sku '{_product.get('sku')}' and id {_product.get('id', 'unknown')} current stock: {current_stock}, executing operation '{validated_record['operation']}' with quantity {validated_record['quantity']}")
 
                 if validated_record["operation"] == "subtract":
                     current_stock = current_stock - int(validated_record["quantity"])
@@ -381,6 +381,10 @@ class UpdateInventorySink(WoocommerceSink):
     def upsert_record(self, record: dict, context: dict) -> None:
         """Upsert the record."""
         try:
+            # Ensure we have the required 'id' field
+            if "id" not in record:
+                raise KeyError("id")
+            
             if record.get("parent_id"):
                 endpoint = (
                     self.endpoint.format(id=record["parent_id"])

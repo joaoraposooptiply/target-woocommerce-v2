@@ -39,9 +39,27 @@ class WoocommerceSink(HotglueSink):
 
     def _handle_operation_error(self, operation: str, error: Exception, record: dict = None):
         """Handle common error patterns to reduce duplication."""
-        error_msg = f"Failed to {operation}: {str(error)}"
+        # Provide more descriptive error messages for common errors
+        if isinstance(error, KeyError):
+            # Handle KeyError specifically
+            missing_key = str(error).strip("'")
+            error_msg = f"Failed to {operation}: Missing required field '{missing_key}' in data"
+        elif isinstance(error, requests.exceptions.RequestException):
+            # Handle API request errors
+            if hasattr(error, 'response') and error.response is not None:
+                status_code = error.response.status_code
+                if status_code == 404:
+                    error_msg = f"Failed to {operation}: Resource not found (404) - The requested resource does not exist"
+                else:
+                    error_msg = f"Failed to {operation}: API request failed with status {status_code}"
+            else:
+                error_msg = f"Failed to {operation}: API request failed - {str(error)}"
+        else:
+            # Generic error handling
+            error_msg = f"Failed to {operation}: {str(error)}"
+        
         self.report_failure(error_msg, record)
-        return None, False, {"error": str(error)}
+        return None, False, {"error": error_msg}
 
     def _log_operation_success(self, operation: str, record_id: str, operation_type: str = "processed"):
         """Log successful operations consistently."""
