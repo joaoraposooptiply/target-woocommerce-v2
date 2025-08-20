@@ -142,7 +142,7 @@ class SalesOrdersSink(WoocommerceSink):
                     error_msg = preprocessed_record.get("error", f"Skipping {self.name} record as preprocessing failed")
                 else:
                     error_msg = f"Skipping {self.name} record as preprocessing failed"
-                self.report_failure(error_msg, record)
+                # Don't call report_failure again as it was already called in preprocess_record
                 return None, False, {"error": error_msg}
             
             # Then, upsert the preprocessed record
