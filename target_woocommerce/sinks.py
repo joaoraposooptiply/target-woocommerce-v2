@@ -253,6 +253,17 @@ class UpdateInventorySink(WoocommerceSink):
                         "stock_quantity": product_data.get("stock_quantity", 0),
                         "type": product_data.get("type", "simple")
                     }
+                    
+                    # For variations, we need to get the parent_id
+                    if product_data.get("type") == "variation":
+                        # The product_data should already contain parent_id for variations
+                        if product_data.get("parent_id"):
+                            product["parent_id"] = product_data["parent_id"]
+                            self.logger.info(f"Variation {product_id} belongs to parent product {product_data['parent_id']}")
+                        else:
+                            self.logger.warning(f"Variation {product_id} has no parent_id, falling back to reference data lookup")
+                            # If we can't get parent_id, we'll fall back to reference data lookup
+                            product = None
                     self.logger.info(f"Fetched current stock for ID {product_id}: {product['stock_quantity']}")
                     
                 except Exception as e:
