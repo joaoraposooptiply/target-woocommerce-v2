@@ -386,7 +386,7 @@ class UpdateInventorySink(WoocommerceSink):
             # Check if this is a skip marker
             if record.get("_skip"):
                 error_msg = record.get("error", "Record skipped")
-                response_data = {"error": error_msg, "skipped": True}
+                response_data = {"error": error_msg}
                 if record.get("id"):
                     response_data["id"] = record["id"]
                 return None, False, response_data
