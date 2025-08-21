@@ -169,7 +169,7 @@ class SalesOrdersSink(WoocommerceSink):
                 id = order_response.get("id")
                 self._log_operation_success("upsert", str(id), "updated")
                 
-                return id, response.ok, {"updated": True}
+                return id, response.ok, {}
             else:
                 response = self.request_api("POST", request_data=record)
                 id = response.json().get("id")
@@ -409,7 +409,7 @@ class UpdateInventorySink(WoocommerceSink):
             id = product_response.get("id")
             self._log_operation_success("upsert", str(id), "updated")
             
-            return id, response.ok, {"updated": True}
+            return id, response.ok, {}
         except Exception as e:
             return self._handle_operation_error("upsert", e, record)
 
@@ -649,7 +649,7 @@ class ProductSink(WoocommerceSink):
                 
                 if record["type"] == "variable":
                     self.process_variation(record, product_response)
-                return id, response.ok, {"updated": True}
+                return id, response.ok, {}
             else:
                 response = self.request_api("POST", request_data=record)
                 product_response = response.json()
