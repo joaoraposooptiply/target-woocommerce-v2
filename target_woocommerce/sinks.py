@@ -367,10 +367,10 @@ class UpdateInventorySink(WoocommerceSink):
                 if validated_record.get("name"):
                     attempted_lookups.append(f"name '{validated_record['name']}'")
                 
-                error_msg = f"Product not found: Attempted to find product by IDs {', '.join(attempted_lookups_ids)} but no matching product exists in WooCommerce."
+                error_msg = f"Failed to find product by ID, no matching product exists in WooCommerce."
                 self.report_failure(error_msg, validated_record)
                 # Return a special marker to indicate this record should be skipped
-                return {"_skip": True, "error": error_msg}
+                return {"_skip": True, "error": error_msg, "id": attempted_lookups_ids[0] if attempted_lookups_ids else None}
 
         except Exception as e:
             error_msg = f"Failed to preprocess {self.name} record: {str(e)}"
@@ -386,7 +386,10 @@ class UpdateInventorySink(WoocommerceSink):
             # Check if this is a skip marker
             if record.get("_skip"):
                 error_msg = record.get("error", "Record skipped")
-                return None, False, {"error": error_msg, "skipped": True}
+                response_data = {"error": error_msg, "skipped": True}
+                if record.get("id"):
+                    response_data["id"] = record["id"]
+                return None, False, response_data
             
             # Ensure we have the required 'id' field
             if "id" not in record:

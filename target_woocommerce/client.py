@@ -62,7 +62,10 @@ class WoocommerceSink(HotglueSink):
             error_msg = f"Failed to {operation}: {str(error)}"
         
         self.report_failure(error_msg, record)
-        return None, False, {"error": error_msg}
+        response_data = {"error": error_msg}
+        if record and record.get("id"):
+            response_data["id"] = record["id"]
+        return None, False, response_data
 
     def _log_operation_success(self, operation: str, record_id: str, operation_type: str = "processed"):
         """Log successful operations consistently."""
